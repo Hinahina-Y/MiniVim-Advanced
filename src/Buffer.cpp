@@ -23,19 +23,19 @@ namespace sjtu
             }
             lines_.push_back(line);
         }
-        path_=path;
+        path_ = path;
         // 从path指向的文件构造Buffer,你需要打开文件并且把文件内容填充进Buffer,并正确初始化一些状态.
         // 注意path可能为空的边界情况
     }
 
     Buffer::Buffer(std::vector<std::string> lines, std::filesystem::path path)
     {
-        //暂时不知道有什么作用
+        // 暂时不知道有什么作用
     }
 
-    void Buffer::copyBuffer(const std::vector<std::string>& lines)
+    void Buffer::copyBuffer(const std::vector<std::string> &lines)
     {
-        lines_=lines;
+        lines_ = lines;
     }
 
     std::size_t Buffer::GetLineCount() const
@@ -65,7 +65,7 @@ namespace sjtu
         // 返回文件和上次保存比起来是否被修改过
         if (path_.empty())
         {
-            return true;
+            return !(lines_.size() == 1 && lines_[0] == "");
         }
         std::string line;
         std::ifstream in(path_); // 读取文件，由ai建议我这么写
@@ -84,6 +84,10 @@ namespace sjtu
         }
         if (lines_index != lines_.size())
         {
+            if (lines_index + 1 == lines_.size() && lines_[lines_index] == "")
+            {
+                return false;
+            }
             return true;
         }
         return false;
@@ -100,7 +104,7 @@ namespace sjtu
         return;
     }
 
-    void Buffer::EraseCharacter(std::size_t row, std::size_t column)//在这个位置按下删除
+    void Buffer::EraseCharacter(std::size_t row, std::size_t column) // 在这个位置按下删除
     {
         if (row >= lines_.size() || column > lines_[row].size())
         {
@@ -111,9 +115,9 @@ namespace sjtu
         lines_[row].erase(column - 1, 1);
     }
 
-    void Buffer::ReplaceCharacter(std::size_t row,std::size_t column,char value)
+    void Buffer::ReplaceCharacter(std::size_t row, std::size_t column, char value)
     {
-        lines_[row][column]=value;
+        lines_[row][column] = value;
     }
 
     void Buffer::SplitLine(std::size_t row, std::size_t column)
@@ -131,9 +135,9 @@ namespace sjtu
         lines_.erase(lines_.begin() + row + 1);
     }
 
-    void Buffer::Achieve_LineUndo(std::size_t row,std::string line)
+    void Buffer::Achieve_LineUndo(std::size_t row, std::string line)
     {
-        lines_[row]=line;
+        lines_[row] = line;
     }
 
     void Buffer::Save()
@@ -148,8 +152,6 @@ namespace sjtu
         path_ = path;
     }
 
-    
-
     void Buffer::WriteTo(const std::filesystem::path &path) const
     {
         // 实际将缓冲区中的内容写入path指向的文件中
@@ -158,21 +160,20 @@ namespace sjtu
             throw std::runtime_error("Error:No File Name.");
             return;
         }
-
         std::ofstream out(path); // 写入文件，由ai建议我这么写
         if (!out)
         {
             throw std::runtime_error("Error:Failed to open file.");
             return;
         }
-
-        for (const auto &line : lines_)
+        for (size_t i = 0; i + 1 < lines_.size(); i++)
         {
-            out << line << '\n';
+            out << lines_[i] << '\n';
         }
-        if(path_.empty()&&lines_.size()==1&&lines_[0]=="")
+        out << lines_[lines_.size() - 1];
+        if (lines_[lines_.size() - 1] != "")
         {
-            return;
+            out << '\n';
         }
         if (!out)
         {

@@ -270,11 +270,11 @@ namespace sjtu
                 }
                 if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value())
                 {
-                    if(count>100)
+                    if (count > 100)
                     {
-                        count=100;
+                        count = 100;
                     }
-                    count=buffer_.GetLineCount()*count/100;
+                    count = buffer_.GetLineCount() * count / 100;
                 }
                 window_.SetCursor(buffer_, {count - 1, 0}, false);
                 window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
@@ -331,7 +331,7 @@ namespace sjtu
             window_.SetCursor(buffer_, window_.GetCursor(), true);
             EnterInsert(window_.GetCursor());
             return;
-        
+
         case ActionKind::EnterCommandLine:
 
             // 进入Command Mode
@@ -633,7 +633,7 @@ namespace sjtu
         // 1. path为空时调用Save,否则调用SaveAs
         // 2. 捕获保存时的异常,把错误写入message_并返回false
         // 3. 成功后生成包含文件名和行数的提示,返回true,供wq判断是否可以退出
-        if (!buffer_.IsModified())
+        if (!buffer_.IsModified() && !(buffer_.GetLineCount() == 1 && buffer_.GetLineAt(0) == ""))
         {
             message_ = "No thing renewed.";
             return true;
@@ -654,7 +654,12 @@ namespace sjtu
             message_ = e.what();
             return false;
         }
-        message_ = "File Name:" + buffer_.GetDisplayName() + " total lines:" + std::to_string(buffer_.GetLineCount());
+        size_t total_lines = buffer_.GetLineCount();
+        if (buffer_.GetLineAt(total_lines - 1) == "")
+        {
+            total_lines--;
+        }
+        message_ = "File Name:" + buffer_.GetDisplayName() + " total lines:" + std::to_string(total_lines);
         return true;
     }
 
