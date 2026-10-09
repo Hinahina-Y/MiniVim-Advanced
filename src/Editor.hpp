@@ -56,6 +56,8 @@ namespace sjtu
         // 总执行逻辑,根据Key和Mode分发给下属函数来处理
         void ProcessKey(KeyEvent key);
 
+        void Handle_UndoAndRedo(bool ruletype);//0撤回 1回退
+
         // ProcessKey的下属函数之一,Editor对NormalMode下的Action的执行,这个action是从parser传进来的
         void Execute(const EditorAction &action);
         void Execute_withArgument(KeyEvent key);

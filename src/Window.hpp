@@ -29,6 +29,7 @@ public:
     void Renew_Lastparser(char lastparser);//记录上一个按键
     void Renew_Lastparser();//清空按键记录
     std::string GetBottomValue() const;
+    std::optional<std::string> GetLastparser() const;
 
     //allow_line_end为true时允许停在最后一个字符之后,供插入模式使用
     void SetCursor(const Buffer& buffer, Position position, bool allow_line_end);

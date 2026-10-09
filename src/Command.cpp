@@ -124,10 +124,12 @@ namespace sjtu
         }
         if (editoraction_1.kind_==ActionKind::None&&editoraction_1.count_.has_value() && *(editoraction_1.count_) > 0) // 先处理数字+[x]的组合键,并且目前只有数字
         {
-            
             switch (editoraction_2.kind_)
             {
             case ActionKind::Move:
+                editoraction_1.kind_ = editoraction_2.kind_;
+                editoraction_1.motion_ = editoraction_2.motion_;
+                return;
             case ActionKind::Redo:
             case ActionKind::Undo:
             case ActionKind::Replace:

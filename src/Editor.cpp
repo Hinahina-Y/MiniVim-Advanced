@@ -69,6 +69,60 @@ namespace sjtu
         window.EnsureCursorVisible(buffer);
     }
 
+    void Editor::Handle_UndoAndRedo(bool ruletype)
+    {
+        window_.Renew_Lastparser();
+        size_t undocount{1};
+        if (ruletype)
+        {
+            if (undo_position_ >= undo_list.size())
+            {
+                message_ = "No Undo Happened!";
+                return;
+            }
+            if (editoraction_.count_.has_value())
+            {
+                undocount = *editoraction_.count_;
+            }
+            if (undo_position_ + undocount >= undo_list.size() + 1)
+            {
+                message_ = "No enough undo,redo:" + std::to_string(undo_list.size() - undo_position_) + " steps";
+                undo_position_ = undo_list.size();
+            }
+            else
+            {
+                message_ = "Redo Succeed!";
+                undo_position_ += undocount;
+            }
+        }
+        else
+        {
+            if (undo_position_ == 0 || undo_list.size() == 0)
+            {
+                message_ = "No Change Happened!";
+                return;
+            }
+            if (editoraction_.count_.has_value())
+            {
+                undocount = *editoraction_.count_;
+            }
+            if (undo_position_ - 1 < undocount)
+            {
+                message_ = "No enough changes,undo:" + std::to_string(undo_position_ - 1) + " steps";
+                undo_position_ = 1;
+            }
+            else
+            {
+                message_ = "Undo Succeed!";
+                undo_position_ -= undocount;
+            }
+        }
+        undo_list[undo_position_ - 1].ApplyUndo(buffer_, window_);
+        window_.SetCursor(buffer_, window_.GetCursor(), false);
+        window_.RenewCount(std::nullopt);
+        normal_parser_.Reset_editoraction(editoraction_);
+    }
+
     // 用path初始化文件缓冲区,Terminal构造时会准备好终端输入环境
     Editor::Editor(const std::filesystem::path &path) : buffer_(path), terminal_() {};
 
@@ -127,7 +181,10 @@ namespace sjtu
                 Execute_withArgument(key);
                 break;
             }
-            window_.Renew_Lastparser(key.value_);
+            if(key.code_==KeyCode::Character)
+            {
+                window_.Renew_Lastparser(key.value_);
+            }
             Execute(normal_parser_.Feed(key));
             break;
         case Mode::Insert:
@@ -173,60 +230,12 @@ namespace sjtu
             Largely_Reset();
             return;
         case ActionKind::Undo: // 处理撤回
-            window_.Renew_Lastparser();
-            if (undo_position_ == 0 || undo_list.size() == 0)
-            {
-                message_ = "No Change Happened!";
-                return;
-            }
-            count = {1};
-            if (editoraction_.count_.has_value())
-            {
-                count = *editoraction_.count_;
-            }
-            if (undo_position_ - 1 < count)
-            {
-                message_ = "No enough changes,undo:" + std::to_string(undo_position_ - 1) + " steps";
-                undo_position_ = 1;
-            }
-            else
-            {
-                message_ = "Undo Succeed!";
-                undo_position_ -= count;
-            }
-            undo_list[undo_position_ - 1].ApplyUndo(buffer_, window_);
-            window_.SetCursor(buffer_, window_.GetCursor(), false);
-            window_.RenewCount(std::nullopt);
-            normal_parser_.Reset_editoraction(editoraction_);
+            Handle_UndoAndRedo(false);
             return;
         case ActionKind::Redo:
-            window_.Renew_Lastparser();
-            if (undo_position_ >= undo_list.size())
-            {
-                message_ = "No Undo Happened!";
-                return;
-            }
-            count = {1};
-            if (editoraction_.count_.has_value())
-            {
-                count = *editoraction_.count_;
-            }
-            if (undo_position_ + count >= undo_list.size() + 1)
-            {
-                message_ = "No enough undo,redo:" + std::to_string(undo_list.size() - undo_position_) + " steps";
-                undo_position_ = undo_list.size();
-            }
-            else
-            {
-                message_ = "Redo Succeed!";
-                undo_position_ += count;
-            }
-            undo_list[undo_position_ - 1].ApplyUndo(buffer_, window_);
-            window_.SetCursor(buffer_, window_.GetCursor(), false);
-            window_.RenewCount(std::nullopt);
-            normal_parser_.Reset_editoraction(editoraction_);
+            Handle_UndoAndRedo(true);
             return;
-        case ActionKind::LineUndo:
+        case ActionKind::LineUndo: // U
             if (Can_LineUndo)
             {
                 buffer_.Achieve_LineUndo(LineUndo_cursor_.row_, LineUndo_);
@@ -236,13 +245,19 @@ namespace sjtu
         case ActionKind::Replace:
             Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
             return;
-        case ActionKind::Delete:
-            if (!action.motion_.has_value() && editoraction_.count_.has_value())
+        case ActionKind::Delete:                     // Del键
+            if (window_.GetLastparser().has_value()) // 处理回撤输入指令
             {
-                editoraction_.count_ = *editoraction_.count_ / 10;
-                editoraction_.kind_ = ActionKind::None;
+                s_line = *window_.GetLastparser();
                 window_.RenewCount(editoraction_.count_);
+                window_.Renew_Lastparser();
                 normal_parser_.Reset_editoraction(editoraction_);
+                for (index = 0; index + 1 < s_line.size(); index++) // 去除最后一个字符，重新读取
+                {
+                    window_.Renew_Lastparser(s_line[index]);
+                    normal_parser_.Merge_editoraction(editoraction_, normal_parser_.Feed({KeyCode::Character, s_line[index]}));
+                    window_.RenewCount(editoraction_.count_);
+                }
             }
             else
             {
@@ -254,11 +269,11 @@ namespace sjtu
                 {
                     window_.ApplyDelete(buffer_, *action.motion_);
                 }
+                window_.RenewCount(editoraction_.count_);
+                normal_parser_.Reset_editoraction(editoraction_);
+                window_.Renew_Lastparser();
+                DealUndoList();
             }
-            window_.RenewCount(editoraction_.count_);
-            normal_parser_.Reset_editoraction(editoraction_);
-            window_.Renew_Lastparser();
-            DealUndoList();
             return;
         case ActionKind::Jump_To:
             if (editoraction_.motion_.has_value())
@@ -268,12 +283,20 @@ namespace sjtu
                 {
                     count = *editoraction_.count_;
                 }
-                if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value())
+                if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value()) // 处理%
                 {
+<<<<<<< HEAD
                     if (count > 100)
                     {
                         count = 100;
                     }
+=======
+                    if (count >= 100)
+                    {
+                        count = 99;
+                    }
+
+>>>>>>> c0f8d19 ( On branch main)
                     count = buffer_.GetLineCount() * count / 100;
                 }
                 window_.SetCursor(buffer_, {count - 1, 0}, false);
@@ -291,7 +314,7 @@ namespace sjtu
         case ActionKind::Match:
             Largely_Reset();
             return;
-        case ActionKind::MergeLine:
+        case ActionKind::MergeLine: // 处理J
             if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
             {
                 s_line = buffer_.GetLineAt(window_.GetCursor().row_);

@@ -268,6 +268,11 @@ namespace sjtu
         return bottom_value;
     }
 
+    std::optional<std::string> Window::GetLastparser() const
+    {
+        return Last_parser_;
+    }
+
     const Position &Window::GetCursor() const
     {
         // 返回当前光标位置的只读引用
