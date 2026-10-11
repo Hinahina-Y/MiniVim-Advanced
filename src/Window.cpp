@@ -216,6 +216,56 @@ namespace sjtu
         SetCursor(buffer, cursor_, false);
     }
 
+    void Window::ApplyDelete(Buffer &buffer, Motion motion)
+    {
+        size_t count = 1;
+        if (remaining_count_.has_value())
+        {
+            count = *remaining_count_;
+        }
+        switch (motion)
+        {
+        case Motion::Left:
+            while (cursor_.column_ > 0 && count > 0)
+            {
+                buffer.EraseCharacter(cursor_.row_, cursor_.column_);
+                cursor_.column_--;
+                count--;
+            }
+            break;
+        case Motion::Right:
+            while (count > 0 && buffer.GetLineAt(cursor_.row_).size() != 0)
+            {
+                buffer.EraseCharacter(cursor_.row_, cursor_.column_ + 1);
+                SetCursor(buffer, cursor_, false);
+                count--;
+            }
+            break;
+        }
+    }
+
+    void Window::Apply_d_Delete(Buffer& buffer,Motion motion)
+    {
+        size_t count{1};
+        if (remaining_count_.has_value())
+        {
+            count = *remaining_count_;
+            remaining_count_=std::nullopt;
+        }
+        switch(motion)
+        {
+            case Motion::Go_Delete://dd
+                ApplyMotion(buffer,Motion::Goto_Front);
+                buffer.EraseLines(cursor_.row_,cursor_.row_+count);
+                break;
+            case Motion::Goto_Back://D
+                buffer.EraseLines(cursor_.row_+1,cursor_.row_+count);
+                buffer.EraseCharacters(cursor_.row_,cursor_.column_,buffer.GetLineAt(cursor_.row_).size());
+                break;
+                
+        }
+    }
+
     void Window::EnsureCursorVisible(const Buffer &buffer)
     {
         // 1. 光标高于或低于可见区域时,调整top_,使光标刚好进入区域
@@ -285,33 +335,6 @@ namespace sjtu
         return viewport_;
     }
 
-    void Window::ApplyDelete(Buffer &buffer, Motion motion)
-    {
-        size_t count = 1;
-        if (remaining_count_.has_value())
-        {
-            count = *remaining_count_;
-        }
-        switch (motion)
-        {
-        case Motion::Left:
-            while (cursor_.column_ > 0 && count > 0)
-            {
-                buffer.EraseCharacter(cursor_.row_, cursor_.column_);
-                cursor_.column_--;
-                count--;
-            }
-            break;
-        case Motion::Right:
-            while (count > 0 && buffer.GetLineAt(cursor_.row_).size() != 0)
-            {
-                buffer.EraseCharacter(cursor_.row_, cursor_.column_ + 1);
-                SetCursor(buffer, cursor_, false);
-                count--;
-            }
-            break;
-        }
-    }
 
     void Window::SetCursor(const Buffer &buffer, Position position, bool allow_line_end)
     {

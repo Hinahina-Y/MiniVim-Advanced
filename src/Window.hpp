@@ -23,6 +23,8 @@ public:
 
     void EnsureCursorVisible(const Buffer& buffer);
 
+    void Apply_d_Delete(Buffer &buffer,Motion motion);
+
     void ApplyDelete(Buffer &buffer,Motion motion);
 
     void RenewCount(std::optional<size_t> expected_count);//更新window里的剩余count值

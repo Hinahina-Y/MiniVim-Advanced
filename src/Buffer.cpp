@@ -115,6 +115,36 @@ namespace sjtu
         lines_[row].erase(column - 1, 1);
     }
 
+    void Buffer::EraseCharacters(std::size_t row,std::size_t column_left,std::size_t column_right)//删除[left,right)的字母.
+    {
+        if(column_right<=column_left||column_left>=lines_[row].size())
+        {
+            return;
+        }
+        if(column_right>lines_[row].size())
+        {
+            column_right=lines_[row].size();
+        }
+        lines_[row].erase(lines_[row].begin()+column_left, lines_[row].begin()+column_right);
+    }
+
+    void Buffer::EraseLines(std::size_t row_up,std::size_t row_down)//删除行[row_up,row_down)
+    {
+        if(row_down<=row_up||row_up>=lines_.size())
+        {
+            return;
+        }
+        if(row_down>lines_.size())
+        {
+            row_down=lines_.size();
+        }
+        lines_.erase(lines_.begin()+row_up, lines_.begin()+row_down);
+        if(lines_.empty())
+        {
+            lines_.push_back("");
+        }
+    }
+
     void Buffer::ReplaceCharacter(std::size_t row, std::size_t column, char value)
     {
         lines_[row][column] = value;

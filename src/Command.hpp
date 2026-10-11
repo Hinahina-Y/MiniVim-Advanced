@@ -27,16 +27,16 @@ namespace sjtu
         Undo,
         Redo,
         LineUndo,
-        Replace,
-        Backspace,
-        Delete,
-        d_Delete,
-        Jump_To,
-        Jump_Max,
-        Match,
-        MergeLine,
-        Move_word,
-        Move_WORD,
+        Replace,//替代
+        Backspace,//回退
+        Delete,//删除单个字母 only for del/x/X
+        d_Delete,//删除
+        Jump_To,//跳转至
+        Jump_Max,//直接跳转到最后一行
+        Match,//匹配 only for%
+        MergeLine,//合并两行 only for J
+        Move_word,//按词移动
+        Move_WORD,//按WORD移动
         Undefined,
         // 在Advanced部分中你很可能需要添加别的ActionKind
     };
@@ -68,6 +68,8 @@ namespace sjtu
     private:
         // 两个辅助函数,从motion/actionkind直接生成对应editoraction,只对某些简单的情形生效.比如h,我们可以根据motion直接得到editoraction为{ActionKind::Move, Motion::h};
         // 这两个接口相当局限,在Advanced中你完全可以不管这两个接口,自己创建更方便的函数来辅助Feed函数
+        bool Merge_editoraction_number(EditorAction &editoraction_1, const EditorAction &editoraction_2);//处理指令数字部分的合并
+        bool Merge_editoraction_delete(EditorAction &editoraction_1, const EditorAction &editoraction_2);//处理指令delete部分的合并
         EditorAction GenerateMotion(Motion motion);
         EditorAction GenerateCommand(ActionKind kind);
     };

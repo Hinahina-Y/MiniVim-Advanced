@@ -77,7 +77,9 @@ namespace sjtu
             case '%':
                 return {ActionKind::Match, std::nullopt, std::nullopt};
             case 'd':
-                return {ActionKind::d_Delete,std::nullopt, std::nullopt};
+                return {ActionKind::d_Delete, std::nullopt, std::nullopt};
+            case 'D':
+                return {ActionKind::d_Delete, Motion::Goto_Back, std::nullopt};
             default:
                 break;
             }
@@ -107,29 +109,35 @@ namespace sjtu
         return editoraction;
     }
 
-    void NormalModeParser::Merge_editoraction(EditorAction &editoraction_1, const EditorAction &editoraction_2)
+    bool NormalModeParser::Merge_editoraction_number(EditorAction &editoraction_1, const EditorAction &editoraction_2)
     {
-        if(editoraction_1.count_.has_value() && *(editoraction_1.count_) > 0)//先合并数字
+        if (editoraction_2.count_.has_value()) // 先合并数字
         {
-            if (editoraction_2.count_.has_value()) // 数字合并
+            if (editoraction_1.count_.has_value() && *(editoraction_1.count_) > 0) // 数字合并
             {
                 if (*editoraction_1.count_ > (size_t)(1 << 28))
                 {
                     throw std::runtime_error("Error:Too large!");
-                    return;
+                    return true;
                 }
                 editoraction_1.count_ = (*(editoraction_1.count_) * 10 + *(editoraction_2.count_));
-                return;
+                return true;
             }
+            else
+            {
+                editoraction_1.count_ = editoraction_2.count_;
+            }
+            return true;
         }
-        if (editoraction_1.kind_==ActionKind::None&&editoraction_1.count_.has_value() && *(editoraction_1.count_) > 0) // 先处理数字+[x]的组合键,并且目前只有数字
+        if (editoraction_1.kind_ != ActionKind::Move && editoraction_1.count_.has_value() && *(editoraction_1.count_) > 0) // 先处理数字+[x]的组合键,并且目前只有数字
         {
             switch (editoraction_2.kind_)
             {
             case ActionKind::Move:
+            case ActionKind::d_Delete:
                 editoraction_1.kind_ = editoraction_2.kind_;
                 editoraction_1.motion_ = editoraction_2.motion_;
-                return;
+                return true;
             case ActionKind::Redo:
             case ActionKind::Undo:
             case ActionKind::Replace:
@@ -137,51 +145,76 @@ namespace sjtu
             case ActionKind::Jump_To:
                 editoraction_1.kind_ = editoraction_2.kind_;
                 editoraction_1.motion_ = std::nullopt;
-                return;
-            case ActionKind::Jump_Max:
+                return true;
+            case ActionKind::Jump_Max: // 要考虑G
                 editoraction_1.kind_ = ActionKind::Jump_To;
                 editoraction_1.motion_ = editoraction_2.motion_;
-                return;
+                return true;
             case ActionKind::Match:
-                editoraction_1.kind_=ActionKind::Jump_To;
-                editoraction_1.motion_=Motion::Down;
-                return;
+                editoraction_1.kind_ = ActionKind::Jump_To;
+                editoraction_1.motion_ = Motion::Down;
+                return true;
             }
         }
-        /*if (editoraction_1.kind_ == ActionKind::d_Delete) // 处理d+[x]
+        return false;
+    }
+
+    bool NormalModeParser::Merge_editoraction_delete(EditorAction &editoraction_1, const EditorAction &editoraction_2)
+    {
+        if (editoraction_2.kind_ == ActionKind::d_Delete && !editoraction_2.motion_.has_value() && !editoraction_1.motion_.has_value()) // dd
         {
-            if (editoraction_2.kind_ == ActionKind::Jump_To||editoraction_2.kind_==ActionKind::Jump_Max) // dg dG后面交给gg处理
+            editoraction_1.motion_ = Motion::Go_Delete;
+            return true;
+        }
+        if (editoraction_2.kind_ == ActionKind::Move) // dj dk dl dh d0 d$ d^
+        {
+            if(editoraction_2.motion_==Motion::Left_allow_crossline)//d Backspace
             {
-                if(editoraction_1.motion_.has_value())//d+[num]+G
-                {
-                    editoraction_1.motion_=Motion::Go_Delete;
-                    //if(editoraction_1.kind_==)
-                    editoraction_1.kind_=ActionKind::Jump_To;
-                }
-                else if(!editoraction_2.motion_.has_value())
-                {
-                    editoraction_1.motion_=Motion::Go_Delete;
-                    editoraction_1.kind_=editoraction_2.kind_;
-                }
-                return;
+                return false;
             }
-            if(editoraction_2.kind_ == ActionKind::Move&&(editoraction_2.motion_==Motion::Up||editoraction_2.motion_==Motion::Down))//d+[num]+j/k
+            editoraction_1.motion_ = editoraction_2.motion_;
+            return true;
+        }
+        /*
+        if (editoraction_2.kind_ == ActionKind::Jump_To || editoraction_2.kind_ == ActionKind::Jump_Max) // dg dG 考虑交给g处理
+        {
+            if (editoraction_2.motion_.has_value()&&editoraction_1.count_.has_value()) // d+[num]+G
             {
-                editoraction_1.motion_=editoraction_2.motion_;
+                editoraction_1.motion_ = Motion::Go_Delete;
+                editoraction_1.kind_=editoraction_2.kind_;
             }
-            return;
+            else
+            {
+                editoraction_1.motion_ = Motion::Go_Delete;
+                editoraction_1.kind_ = editoraction_2.kind_;
+            }
+            return true;
         }*/
+        return false;
+    }
+
+    void NormalModeParser::Merge_editoraction(EditorAction &editoraction_1, const EditorAction &editoraction_2)
+    {
+        if (editoraction_2.count_.has_value() || (editoraction_1.kind_ == ActionKind::None && editoraction_1.count_.has_value())) // 处理数字开头
+        {
+            if (Merge_editoraction_number(editoraction_1, editoraction_2))
+                return;
+        }
+        if (editoraction_1.kind_ == ActionKind::d_Delete) // 处理d+[x]
+        {
+            if (Merge_editoraction_delete(editoraction_1, editoraction_2))
+                return;
+        }
         if (editoraction_1.kind_ == ActionKind::Jump_To) // 处理g+[x]
         {
             if (editoraction_2.kind_ == ActionKind::Jump_To) // ([num]+)gg
             {
-                if(!editoraction_2.motion_.has_value())
+                if (!editoraction_2.motion_.has_value())
                 {
-                    if(editoraction_1.motion_==Motion::Go_Delete)
+                    if (editoraction_1.motion_ == Motion::Go_Delete)
                     {
-                        
                     }
-                    editoraction_1.motion_=Motion::Goto_First_Noblank;
+                    editoraction_1.motion_ = Motion::Goto_First_Noblank;
                 }
                 return;
             }
@@ -192,7 +225,7 @@ namespace sjtu
                 return;
             }
             Reset_editoraction(editoraction_1);
-            editoraction_1.kind_=ActionKind::Undefined;
+            editoraction_1.kind_ = ActionKind::Undefined;
             return;
         }
         if (editoraction_1.kind_ == ActionKind::LineUndo)
@@ -202,7 +235,7 @@ namespace sjtu
         if (editoraction_1.kind_ != ActionKind::None) // 不存在的组合，认为输入错误，直接操作中断
         {
             Reset_editoraction(editoraction_1);
-            editoraction_1.kind_=ActionKind::Undefined;
+            editoraction_1.kind_ = ActionKind::Undefined;
             return;
         }
         editoraction_1 = editoraction_2;

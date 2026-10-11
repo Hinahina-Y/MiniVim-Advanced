@@ -40,33 +40,39 @@ namespace sjtu
 
     } // namespace
 
-    void UnDo_ReDo::Get_Do_Information(Buffer &buffer, Window &window)
+    // 用path初始化文件缓冲区,Terminal构造时会准备好终端输入环境
+    Editor::Editor(const std::filesystem::path &path) : buffer_(path), terminal_() {};
+
+    void Editor::Run()
     {
-        size_t buffersize = buffer.GetLineCount();
-        Undo_lines_.clear();
-        for (size_t i = 0; i < buffersize; i++)
+        // 每轮先刷新画面,再读取并处理一个按键;退出循环后清屏
+        while (running_)
         {
-            Undo_lines_.push_back(buffer.GetLineAt(i));
+            RefreshScreen();
+            ProcessKey(terminal_.ReadKey());
         }
-        pos_ = window.GetCursor();
+        terminal_.ClearScreen();
     }
-    const size_t UnDo_ReDo::GetUndoLineCount() const
+
+    // 返回编辑器是否还需要继续运行
+    bool Editor::IsRunning() const noexcept { return false; }
+
+    void Editor::RefreshScreen()
     {
-        return Undo_lines_.size();
+        // 1. 获取终端大小(GetScreenSize),更新窗口可显示的范围,并让光标落在可见区域内
+        // 2. 把当前模式、命令和提示打包成RenderState
+        // 3. 让Renderer生成一帧字符串,再交给Terminal输出
+        // 这里是你唯一需要调用Terminal中的接口的地方,请调用WriteOutput
+        window_.Resize(terminal_.GetScreenSize());
+        window_.EnsureCursorVisible(buffer_);
+        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, command_cursor}));
     }
-    const std::string &UnDo_ReDo::GetUndoLineAt(std::size_t row) const
+
+    void Editor::Largely_Reset()
     {
-        return Undo_lines_[row];
-    }
-    const Position &UnDo_ReDo::GetUndoCursor() const
-    {
-        return pos_;
-    }
-    void UnDo_ReDo::ApplyUndo(Buffer &buffer, Window &window)
-    {
-        buffer.copyBuffer(Undo_lines_);
-        window.SetCursor(buffer, pos_, false);
-        window.EnsureCursorVisible(buffer);
+        window_.Renew_Lastparser();
+        window_.RenewCount(std::nullopt);
+        normal_parser_.Reset_editoraction(editoraction_);
     }
 
     void Editor::Handle_UndoAndRedo(bool ruletype)
@@ -123,41 +129,6 @@ namespace sjtu
         normal_parser_.Reset_editoraction(editoraction_);
     }
 
-    // 用path初始化文件缓冲区,Terminal构造时会准备好终端输入环境
-    Editor::Editor(const std::filesystem::path &path) : buffer_(path), terminal_() {};
-
-    void Editor::Run()
-    {
-        // 每轮先刷新画面,再读取并处理一个按键;退出循环后清屏
-        while (running_)
-        {
-            RefreshScreen();
-            ProcessKey(terminal_.ReadKey());
-        }
-        terminal_.ClearScreen();
-    }
-
-    // 返回编辑器是否还需要继续运行
-    bool Editor::IsRunning() const noexcept { return false; }
-
-    void Editor::RefreshScreen()
-    {
-        // 1. 获取终端大小(GetScreenSize),更新窗口可显示的范围,并让光标落在可见区域内
-        // 2. 把当前模式、命令和提示打包成RenderState
-        // 3. 让Renderer生成一帧字符串,再交给Terminal输出
-        // 这里是你唯一需要调用Terminal中的接口的地方,请调用WriteOutput
-        window_.Resize(terminal_.GetScreenSize());
-        window_.EnsureCursorVisible(buffer_);
-        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, command_cursor}));
-    }
-
-    void Editor::Largely_Reset()
-    {
-        window_.Renew_Lastparser();
-        window_.RenewCount(std::nullopt);
-        normal_parser_.Reset_editoraction(editoraction_);
-    }
-
     void Editor::ProcessKey(KeyEvent key)
     {
         // 1. (可选)先处理所有模式都能使用的Ctrl-Q,用于紧急退出
@@ -181,7 +152,7 @@ namespace sjtu
                 Execute_withArgument(key);
                 break;
             }
-            if(key.code_==KeyCode::Character)
+            if (key.code_ == KeyCode::Character)
             {
                 window_.Renew_Lastparser(key.value_);
             }
@@ -209,7 +180,7 @@ namespace sjtu
             Largely_Reset();
             return;
         }
-        if (action.kind_ == ActionKind::Undefined)
+        if (editoraction_.kind_ == ActionKind::Undefined)
         {
             Largely_Reset();
             return;
@@ -218,6 +189,7 @@ namespace sjtu
         size_t count{1};
         size_t index;
         std::string s_line;
+        Position now_cursor = window_.GetCursor();
         // 根据Action的种类调用对应模块
         switch (editoraction_.kind_)
         {
@@ -240,13 +212,13 @@ namespace sjtu
             {
                 buffer_.Achieve_LineUndo(LineUndo_cursor_.row_, LineUndo_);
                 window_.SetCursor(buffer_, LineUndo_cursor_, false);
-                DealUndoList();
+                DealUndoList(now_cursor);
             } // 从本地Vim搞不懂到底实现了什么,所以先不实现，canlineundo恒为False
         case ActionKind::Replace:
             Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
             return;
-        case ActionKind::Delete:                     // Del键
-            if (window_.GetLastparser().has_value()) // 处理回撤输入指令
+        case ActionKind::Delete:                                                                            // Del键 x键
+            if ((action.kind_ == ActionKind::Delete && !action.motion_.has_value()) && window_.GetLastparser().has_value()) // 处理回撤输入指令
             {
                 s_line = *window_.GetLastparser();
                 window_.RenewCount(editoraction_.count_);
@@ -269,12 +241,19 @@ namespace sjtu
                 {
                     window_.ApplyDelete(buffer_, *action.motion_);
                 }
-                window_.RenewCount(editoraction_.count_);
-                normal_parser_.Reset_editoraction(editoraction_);
-                window_.Renew_Lastparser();
-                DealUndoList();
+                DealUndoList(now_cursor);
+                Largely_Reset();
             }
             return;
+        case ActionKind::d_Delete:
+            if (editoraction_.motion_.has_value())
+            {
+                window_.Apply_d_Delete(buffer_, *editoraction_.motion_);
+                window_.SetCursor(buffer_, window_.GetCursor(), false);
+                window_.EnsureCursorVisible(buffer_);
+                DealUndoList(now_cursor);
+                Largely_Reset();
+            }
         case ActionKind::Jump_To:
             if (editoraction_.motion_.has_value())
             {
@@ -331,7 +310,7 @@ namespace sjtu
                     buffer_.JoinLine(window_.GetCursor().row_);
                     window_.SetCursor(buffer_, window_.GetCursor(), false);
                     Largely_Reset();
-                    DealUndoList();
+                    DealUndoList(now_cursor);
                 }
             }
             return;
@@ -370,6 +349,7 @@ namespace sjtu
 
     void Editor::Execute_withArgument(KeyEvent key)
     {
+        Position now_cursor = window_.GetCursor();
         if (key.code_ == KeyCode::Delete || key.code_ == KeyCode::Backspace)
         {
             window_.Renew_Lastparser();
@@ -393,7 +373,7 @@ namespace sjtu
                 normal_parser_.Reset_editoraction(editoraction_);
                 window_.Renew_Lastparser();
                 window_.RenewCount(std::nullopt);
-                DealUndoList();
+                DealUndoList(now_cursor);
                 return;
             }
             if (cursor_pos.column_ + count > line_length)
@@ -435,7 +415,7 @@ namespace sjtu
             normal_parser_.Reset_editoraction(editoraction_);
             window_.Renew_Lastparser();
             window_.RenewCount(std::nullopt);
-            DealUndoList();
+            DealUndoList(now_cursor);
             return;
         }
     }
@@ -686,7 +666,7 @@ namespace sjtu
         return true;
     }
 
-    void Editor::DealUndoList()
+    void Editor::DealUndoList(Position pos)
     {
         bool is_modified = false;
         if (!undo_list.empty())
@@ -720,10 +700,14 @@ namespace sjtu
         }
         undo_list.push_back(u_r);
         undo_position_++;
-        while (undo_list.size() > 1000 && undo_position_ != 0)
+        while (undo_list.size() > 100 && undo_position_ != 0)
         {
             undo_list.erase(undo_list.begin());
             undo_position_--;
+        }
+        if (undo_list.size() > 1 && undo_position_ > 1)
+        {
+            undo_list[undo_position_ - 2].Renew_Position(pos);
         }
     }
 
