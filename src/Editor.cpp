@@ -79,6 +79,7 @@ namespace sjtu
     {
         window_.Renew_Lastparser();
         size_t undocount{1};
+        size_t previous_position = undo_position_;
         if (ruletype)
         {
             if (undo_position_ >= undo_list.size())
@@ -123,6 +124,7 @@ namespace sjtu
                 undo_position_ -= undocount;
             }
         }
+        message_ += "  " + undo_list[undo_position_ - 1].GetUndoTime(undo_list[previous_position - 1].GetTimeTag());
         undo_list[undo_position_ - 1].ApplyUndo(buffer_, window_);
         window_.SetCursor(buffer_, window_.GetCursor(), false);
         window_.RenewCount(std::nullopt);
@@ -197,7 +199,24 @@ namespace sjtu
             return;
         case ActionKind::Move:
             // 交给Window吧
-            window_.ApplyMotion(buffer_, *editoraction_.motion_);
+            if (!editoraction_.type_.has_value()) // 防止一些意外情况
+            {
+                Largely_Reset();
+                message_ = "ERROR:UNKNOWN-Move without type.";
+                return;
+            }
+            switch (*editoraction_.type_)
+            {
+            case ActionType::Ordinary:
+                window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                break;
+            case ActionType::word:
+                window_.ApplyMoveword(buffer_, *editoraction_.motion_, false);
+                break;
+            case ActionType::WORD:
+                window_.ApplyMoveword(buffer_, *editoraction_.motion_, true);
+                break;
+            }
             window_.SetCursor(buffer_, window_.GetCursor(), false);
             Largely_Reset();
             return;
@@ -217,7 +236,7 @@ namespace sjtu
         case ActionKind::Replace:
             Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
             return;
-        case ActionKind::Delete:                                                                            // Del键 x键
+        case ActionKind::Delete:                                                                                            // Del键 x键
             if ((action.kind_ == ActionKind::Delete && !action.motion_.has_value()) && window_.GetLastparser().has_value()) // 处理回撤输入指令
             {
                 s_line = *window_.GetLastparser();
@@ -246,15 +265,15 @@ namespace sjtu
             }
             return;
         case ActionKind::d_Delete:
-            if (editoraction_.motion_.has_value())
+            if (editoraction_.motion_.has_value() && editoraction_.type_.has_value()) // 确定三个参数，1.向哪个方向删，2.以什么规则删 3.删多少（缺省为1)
             {
-                window_.Apply_d_Delete(buffer_, *editoraction_.motion_);
+                window_.Apply_d_Delete(buffer_, *editoraction_.motion_, editoraction_.type_);
                 window_.SetCursor(buffer_, window_.GetCursor(), false);
                 window_.EnsureCursorVisible(buffer_);
                 DealUndoList(now_cursor);
                 Largely_Reset();
             }
-        case ActionKind::Jump_To:
+        case ActionKind::Jump_To: // 确定2个参数 1.以什么规则跳跃 2.跳多少(缺省为1)
             if (editoraction_.motion_.has_value())
             {
                 count = 1;
@@ -306,14 +325,7 @@ namespace sjtu
                 }
             }
             return;
-        case ActionKind::Move_word:
-            window_.ApplyMoveword(buffer_, *editoraction_.motion_, false);
-            Largely_Reset();
-            return;
-        case ActionKind::Move_WORD:
-            window_.ApplyMoveword(buffer_, *editoraction_.motion_, true);
-            Largely_Reset();
-            return;
+
         case ActionKind::InsertBefore:
             // 进入InsertMode,Editor自己就有对应方法
             EnterInsert(window_.GetCursor());

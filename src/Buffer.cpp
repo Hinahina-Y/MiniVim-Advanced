@@ -115,33 +115,91 @@ namespace sjtu
         lines_[row].erase(column - 1, 1);
     }
 
-    void Buffer::EraseCharacters(std::size_t row,std::size_t column_left,std::size_t column_right)//删除[left,right)的字母.
+    void Buffer::EraseLines(std::size_t row_up, std::size_t row_down) // 删除行[row_up,row_down)
     {
-        if(column_right<=column_left||column_left>=lines_[row].size())
+        if (row_down <= row_up || row_up >= lines_.size())
         {
             return;
         }
-        if(column_right>lines_[row].size())
+        if (row_down > lines_.size())
         {
-            column_right=lines_[row].size();
+            row_down = lines_.size();
         }
-        lines_[row].erase(lines_[row].begin()+column_left, lines_[row].begin()+column_right);
-    }
-
-    void Buffer::EraseLines(std::size_t row_up,std::size_t row_down)//删除行[row_up,row_down)
-    {
-        if(row_down<=row_up||row_up>=lines_.size())
+        if (row_up < 0)
         {
-            return;
+            row_up = 0;
         }
-        if(row_down>lines_.size())
-        {
-            row_down=lines_.size();
-        }
-        lines_.erase(lines_.begin()+row_up, lines_.begin()+row_down);
-        if(lines_.empty())
+        lines_.erase(lines_.begin() + row_up, lines_.begin() + row_down);
+        if (lines_.empty())
         {
             lines_.push_back("");
+        }
+    }
+
+    void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right)
+    {
+        if (column_right <= column_left && column_left >= lines_[row].size())
+        {
+            return;
+        }
+        if (column_right > lines_[row].size())
+        {
+            column_right = lines_[row].size();
+        }
+        if (column_left < 0)
+        {
+            column_left = 0;
+        }
+        lines_[row].erase(lines_[row].begin() + column_left, lines_[row].begin() + column_right);
+    }
+
+    // 删除[left,right)的字母,这里left，right是两个坐标，中间字母指的是向右行走（允许跨行会遇到的字母).
+    void Buffer::EraseCharacters(std::size_t row_left, std::size_t column_left, std::size_t row_right, std::size_t column_right)
+    {
+        bool crossline = false;
+        if (row_left < 0)
+        {
+            row_left = 0;
+            column_left = 0;
+        }
+        if (row_right >= lines_.size())
+        {
+            row_right = lines_.size() - 1;
+            column_right = lines_[row_right].size() + 1;
+        }
+        if (row_left > row_right || (row_left == row_right && column_right <= column_left))
+        {
+            std::swap(row_left, row_right);
+            std::swap(column_left, column_right);
+        }
+        if (column_left >= lines_[row_left].size())
+        {
+            return;
+        }
+        if (column_right > lines_[row_right].size())
+        {
+            column_right = lines_[row_right].size();
+            crossline = true;
+        }
+        if (column_left < 0)
+        {
+            column_left = 0;
+        }
+        if (row_left == row_right)
+        {
+
+            lines_[row_left].erase(lines_[row_left].begin() + column_left, lines_[row_left].begin() + column_right);
+            if (crossline)
+                JoinLine(row_left);
+        }
+        else
+        {
+            lines_[row_left].erase(lines_[row_left].begin() + column_left, lines_[row_left].end());
+            EraseLines(row_left + 1, row_right + 1);
+            lines_[row_right].erase(lines_[row_left].begin(), lines_[row_left].begin() + column_right);
+            JoinLine(row_left);
+            if (crossline)
+                JoinLine(row_left);
         }
     }
 
@@ -161,6 +219,10 @@ namespace sjtu
     void Buffer::JoinLine(std::size_t row)
     {
         // 把第row + 1行合并进第row行
+        if (row + 1 >= lines_.size())
+        {
+            return;
+        }
         lines_[row] += lines_[row + 1];
         lines_.erase(lines_.begin() + row + 1);
     }

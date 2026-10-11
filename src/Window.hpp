@@ -23,7 +23,7 @@ public:
 
     void EnsureCursorVisible(const Buffer& buffer);
 
-    void Apply_d_Delete(Buffer &buffer,Motion motion);
+    void Apply_d_Delete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
 
     void ApplyDelete(Buffer &buffer,Motion motion);
 

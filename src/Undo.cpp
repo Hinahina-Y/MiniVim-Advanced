@@ -26,8 +26,33 @@ namespace sjtu
     }
     void UnDo_ReDo::Renew_Position(Position pos)
     {
-        pos_=pos;
+        pos_ = pos;
     }
+    std::time_t UnDo_ReDo::GetTimeTag()
+    {
+        return Timetag_;
+    }
+
+    std::string UnDo_ReDo::GetUndoTime(std::time_t previous_timetag) const
+    {
+        size_t Seconds = (size_t)(std::abs(std::difftime(previous_timetag, Timetag_)));
+        if (Seconds > 600)
+        {
+            struct std::tm PreviousTime;
+            localtime_r(&previous_timetag, &PreviousTime);
+            char s[64];
+            std::strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", &PreviousTime);
+            return std::string(s);
+        }
+        std::string ReturnString = std::to_string(Seconds) + " second";
+        if (Seconds > 1)
+        {
+            ReturnString += "s";
+        }
+        ReturnString += " ago";
+        return ReturnString;
+    }
+
     void UnDo_ReDo::ApplyUndo(Buffer &buffer, Window &window)
     {
         buffer.copyBuffer(Undo_lines_);

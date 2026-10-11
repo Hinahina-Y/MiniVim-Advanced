@@ -244,25 +244,109 @@ namespace sjtu
         }
     }
 
-    void Window::Apply_d_Delete(Buffer& buffer,Motion motion)
+    void Window::Apply_d_Delete(Buffer &buffer, Motion motion, std::optional<ActionType> type)
     {
         size_t count{1};
         if (remaining_count_.has_value())
         {
             count = *remaining_count_;
-            remaining_count_=std::nullopt;
         }
-        switch(motion)
+        if (!type.has_value())
         {
-            case Motion::Go_Delete://dd
-                ApplyMotion(buffer,Motion::Goto_Front);
-                buffer.EraseLines(cursor_.row_,cursor_.row_+count);
+            return;
+        }
+        switch (*type)
+        {
+        case ActionType::Ordinary:
+        {
+            switch (motion)
+            {
+            case Motion::Go_Delete: // dd
+                ApplyMotion(buffer, Motion::Goto_Front);
+                buffer.EraseLines(cursor_.row_, cursor_.row_ + count);
                 break;
-            case Motion::Goto_Back://D
-                buffer.EraseLines(cursor_.row_+1,cursor_.row_+count);
-                buffer.EraseCharacters(cursor_.row_,cursor_.column_,buffer.GetLineAt(cursor_.row_).size());
+            case Motion::Goto_Back: // D
+                buffer.EraseLines(cursor_.row_ + 1, cursor_.row_ + count);
+                buffer.EraseCharacters(cursor_.row_, cursor_.column_, buffer.GetLineAt(cursor_.row_).size());
                 break;
-                
+            case Motion::Goto_Front:
+                buffer.EraseCharacters(cursor_.row_, 0, cursor_.column_);
+                break;
+            case Motion::Left:
+            case Motion::Right:
+                ApplyDelete(buffer, motion);
+                break;
+            case Motion::Up:
+                ApplyMotion(buffer, Motion::Goto_Front);
+                buffer.EraseLines(cursor_.row_ - count, cursor_.row_ + 1);
+                break;
+            case Motion::Down:
+                ApplyMotion(buffer, Motion::Goto_Front);
+                buffer.EraseLines(cursor_.row_, cursor_.row_ + count + 1);
+                break;
+            }
+            break;
+        }
+        case ActionType::word:
+        {
+            Position now_cursor_ = cursor_;
+            switch (motion)
+            {
+            case Motion::Left:
+                ApplyMoveword(buffer, motion, false);
+                buffer.EraseCharacters(cursor_.row_,cursor_.column_+1,now_cursor_.row_,now_cursor_.column_);
+                cursor_.column_++;
+                SetCursor(buffer,cursor_,false);
+                break;
+            case Motion::Right:
+                ApplyMoveword(buffer, motion, false);
+                buffer.EraseCharacters(now_cursor_.row_,now_cursor_.column_,cursor_.row_,cursor_.column_);
+                SetCursor(buffer,now_cursor_,false);
+                break;
+            case Motion::Up:
+                ApplyMoveword(buffer, motion, false);
+                buffer.EraseCharacters(cursor_.row_,cursor_.column_+1,now_cursor_.row_,now_cursor_.column_);
+                cursor_.column_++;
+                SetCursor(buffer,cursor_,false);
+                break;
+            case Motion::Down:
+                ApplyMoveword(buffer, motion, false);
+                buffer.EraseCharacters(now_cursor_.row_,now_cursor_.column_,cursor_.row_,cursor_.column_+1);
+                SetCursor(buffer,now_cursor_,false);
+                break;
+            }
+            break;
+        }
+        case ActionType::WORD:
+        {
+            Position now_cursor_ = cursor_;
+            switch (motion)
+            {
+            case Motion::Left:
+                ApplyMoveword(buffer, motion, true);
+                buffer.EraseCharacters(cursor_.row_,cursor_.column_+1,now_cursor_.row_,now_cursor_.column_);
+                cursor_.column_++;
+                SetCursor(buffer,cursor_,false);
+                break;
+            case Motion::Right:
+                ApplyMoveword(buffer, motion, true);
+                buffer.EraseCharacters(now_cursor_.row_,now_cursor_.column_,cursor_.row_,cursor_.column_);
+                SetCursor(buffer,now_cursor_,false);
+                break;
+            case Motion::Up:
+                ApplyMoveword(buffer, motion, true);
+                buffer.EraseCharacters(cursor_.row_,cursor_.column_+1,now_cursor_.row_,now_cursor_.column_);
+                cursor_.column_++;
+                SetCursor(buffer,cursor_,false);
+                break;
+            case Motion::Down:
+                ApplyMoveword(buffer, motion, true);
+                buffer.EraseCharacters(now_cursor_.row_,now_cursor_.column_,cursor_.row_,cursor_.column_+1);
+                SetCursor(buffer,now_cursor_,false);
+                break;
+            }
+            break;
+        }
         }
     }
 
@@ -296,11 +380,11 @@ namespace sjtu
 
     void Window::Renew_Lastparser(char lastparser)
     {
-        if(!Last_parser_.has_value())
+        if (!Last_parser_.has_value())
         {
-            Last_parser_="";
+            Last_parser_ = "";
         }
-        Last_parser_=*Last_parser_ + std::string(1,lastparser);
+        Last_parser_ = *Last_parser_ + std::string(1, lastparser);
     }
 
     void Window::Renew_Lastparser()
@@ -334,7 +418,6 @@ namespace sjtu
         // 返回当前可见区域的只读引用,供Renderer绘制
         return viewport_;
     }
-
 
     void Window::SetCursor(const Buffer &buffer, Position position, bool allow_line_end)
     {

@@ -54,6 +54,16 @@ enum class Motion {
     Go_Delete,
 };
 
+//用于分门别类，比如是按字符移动还是按格子移动
+enum class ActionType{
+    Ordinary,//通常的做法，一般指单这个操作对应的基础ActionKind，不加任何组合的情况
+    word,
+    WORD,
+    Line,
+    Delete,
+    To,//以访问某个特定行或者特定列的方式执行这个ActionKind
+};
+
 } // namespace sjtu
 
 #endif // MINIVIM_TYPES_HPP
