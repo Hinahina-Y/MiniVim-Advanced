@@ -264,18 +264,10 @@ namespace sjtu
                 }
                 if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value()) // 处理%
                 {
-<<<<<<< HEAD
                     if (count > 100)
                     {
                         count = 100;
                     }
-=======
-                    if (count >= 100)
-                    {
-                        count = 99;
-                    }
-
->>>>>>> c0f8d19 ( On branch main)
                     count = buffer_.GetLineCount() * count / 100;
                 }
                 window_.SetCursor(buffer_, {count - 1, 0}, false);
