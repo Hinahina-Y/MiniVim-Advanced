@@ -50,9 +50,9 @@ std::string Renderer::Render(const Buffer& buffer, const Window& window, const R
         }
         else
         {
-            const std::string& line=buffer.GetLineAt(screen_row+viewport.top_);
-            size_t l=RenderColumnToBufferColumn(line,viewport.left_);
-            size_t r=RenderColumnToBufferColumn(line,viewport.left_+viewport.columns_+(size_t)1);
+            const std::string& line=ExpandForDisplay(buffer.GetLineAt(screen_row+viewport.top_));
+            size_t l=viewport.left_;
+            size_t r=viewport.left_+viewport.columns_+(size_t)1;
             if(viewport.left_>=line.size())
             {
                 AppendClearedLine(frame,"",width,true);
@@ -144,7 +144,20 @@ std::string Renderer::Render(const Buffer& buffer, const Window& window, const R
 std::string Renderer::ExpandForDisplay(std::string_view line) {
     //从左到右扫描buffer中一整行的实际内容,并扩展到render应该输出的视图
     //你应该在Render中调用这个函数,并把函数返回的结果按照视口剪切用于Render的某些行
-    //我似乎暂时可以不用到，先观望一下
-    return {};
+    std::string Return_string="";
+    for(size_t index=0;index<line.size();index++)
+    {
+        if(line[index]!='\t')
+        {
+            Return_string+=line[index];
+        }
+        else
+        {
+            size_t space_sum{NextScreenColumn(0,'\t')};
+            while(space_sum--)
+                Return_string+=" ";
+        }
+    }
+    return Return_string;
 }
 } // namespace sjtu

@@ -1,7 +1,18 @@
+#include <cmath>
+
 #include "Undo.hpp"
 
 namespace sjtu
 {
+    void UnDo_ReDo::Renew_Time()
+    {
+        Timetag_=time(nullptr);
+    }
+    
+    void UnDo_ReDo::Renew_Position(Position pos)
+    {
+        pos_ = pos;
+    }
     void UnDo_ReDo::Get_Do_Information(Buffer &buffer, Window &window)
     {
         size_t buffersize = buffer.GetLineCount();
@@ -10,7 +21,8 @@ namespace sjtu
         {
             Undo_lines_.push_back(buffer.GetLineAt(i));
         }
-        pos_ = window.GetCursor();
+        Renew_Position(window.GetCursor());
+        Renew_Time();
     }
     const size_t UnDo_ReDo::GetUndoLineCount() const
     {
@@ -24,28 +36,24 @@ namespace sjtu
     {
         return pos_;
     }
-    void UnDo_ReDo::Renew_Position(Position pos)
-    {
-        pos_ = pos;
-    }
     std::time_t UnDo_ReDo::GetTimeTag()
     {
         return Timetag_;
     }
 
-    std::string UnDo_ReDo::GetUndoTime(std::time_t previous_timetag) const
+    std::string UnDo_ReDo::GetUndoTime(std::time_t Previous_Timetag) const
     {
-        size_t Seconds = (size_t)(std::abs(std::difftime(previous_timetag, Timetag_)));
+        size_t Seconds = 1+(size_t)(std::fabs(std::difftime(Previous_Timetag, Timetag_)));
         if (Seconds > 600)
         {
-            struct std::tm PreviousTime;
-            localtime_r(&previous_timetag, &PreviousTime);
+            struct std::tm PreviousTime{};
+            localtime_r(&Previous_Timetag, &PreviousTime);
             char s[64];
             std::strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", &PreviousTime);
             return std::string(s);
         }
         std::string ReturnString = std::to_string(Seconds) + " second";
-        if (Seconds > 1)
+        if (Seconds > 2)
         {
             ReturnString += "s";
         }
@@ -58,5 +66,6 @@ namespace sjtu
         buffer.copyBuffer(Undo_lines_);
         window.SetCursor(buffer, pos_, false);
         window.EnsureCursorVisible(buffer);
+        Renew_Time();
     }
 }

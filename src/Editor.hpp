@@ -76,6 +76,8 @@ namespace sjtu
         std::string message_;     // 底部的提示或错误信息
         bool running_{true};      // 设为false后结束主循环
 
+        Position last_cursor_{0,0}; //上一次撤回前的光标位置
+
         std::vector<UnDo_ReDo> undo_list; // 用于撤销
         size_t undo_position_{0};         // 记录现在撤销了几次
 

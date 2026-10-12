@@ -182,16 +182,36 @@ namespace sjtu
             Largely_Reset();
             return;
         }
+        // 先处理Del删除指令(其他指令都是处理，这个是撤回)
+        if (normal_parser_.EditorAction_Equal_Key(action, {KeyCode::Delete, ' '}) && window_.GetLastparser().has_value())
+        {
+            std::string s_line = *window_.GetLastparser();
+            window_.RenewCount(editoraction_.count_);
+            window_.Renew_Lastparser();
+            normal_parser_.Reset_editoraction(editoraction_);
+            for (size_t index = 0; index + 1 < s_line.size(); index++) // 去除最后一个字符，重新读取
+            {
+                window_.Renew_Lastparser(s_line[index]);
+                normal_parser_.Merge_editoraction(editoraction_, normal_parser_.Feed({KeyCode::Character, s_line[index]}));
+                window_.RenewCount(editoraction_.count_);
+            }
+            return;
+        }
+
         if (editoraction_.kind_ == ActionKind::Undefined)
         {
             Largely_Reset();
             return;
         }
         window_.RenewCount(editoraction_.count_); // 更新含[Count]的组合按键Count值
-        size_t count{1};
-        size_t index;
+        size_t count{1} , index{1};
+        bool Modified = false;
         std::string s_line;
         Position now_cursor = window_.GetCursor();
+        count = 1;
+        if (editoraction_.count_.has_value())
+            count = *editoraction_.count_;
+
         // 根据Action的种类调用对应模块
         switch (editoraction_.kind_)
         {
@@ -236,96 +256,78 @@ namespace sjtu
         case ActionKind::Replace:
             Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
             return;
-        case ActionKind::Delete:                                                                                            // Del键 x键
-            if ((action.kind_ == ActionKind::Delete && !action.motion_.has_value()) && window_.GetLastparser().has_value()) // 处理回撤输入指令
-            {
-                s_line = *window_.GetLastparser();
-                window_.RenewCount(editoraction_.count_);
-                window_.Renew_Lastparser();
-                normal_parser_.Reset_editoraction(editoraction_);
-                for (index = 0; index + 1 < s_line.size(); index++) // 去除最后一个字符，重新读取
-                {
-                    window_.Renew_Lastparser(s_line[index]);
-                    normal_parser_.Merge_editoraction(editoraction_, normal_parser_.Feed({KeyCode::Character, s_line[index]}));
-                    window_.RenewCount(editoraction_.count_);
-                }
-            }
-            else
-            {
-                if (!editoraction_.motion_.has_value())
-                {
-                    window_.ApplyDelete(buffer_, Motion::Right);
-                }
-                else
-                {
-                    window_.ApplyDelete(buffer_, *action.motion_);
-                }
-                DealUndoList(now_cursor);
-                Largely_Reset();
-            }
-            return;
-        case ActionKind::d_Delete:
+        case ActionKind::Delete:
             if (editoraction_.motion_.has_value() && editoraction_.type_.has_value()) // 确定三个参数，1.向哪个方向删，2.以什么规则删 3.删多少（缺省为1)
             {
-                window_.Apply_d_Delete(buffer_, *editoraction_.motion_, editoraction_.type_);
+                window_.ApplyDelete(buffer_, *editoraction_.motion_, editoraction_.type_);
                 window_.SetCursor(buffer_, window_.GetCursor(), false);
                 window_.EnsureCursorVisible(buffer_);
                 DealUndoList(now_cursor);
-                Largely_Reset();
-            }
-        case ActionKind::Jump_To: // 确定2个参数 1.以什么规则跳跃 2.跳多少(缺省为1)
-            if (editoraction_.motion_.has_value())
-            {
-                count = 1;
-                if (editoraction_.count_.has_value())
+                if (editoraction_.into_mode_ == Mode::Insert) // change
                 {
-                    count = *editoraction_.count_;
+                    EnterInsert(window_.GetCursor());
                 }
-                if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value()) // 处理%
-                {
-                    if (count > 100)
-                    {
-                        count = 100;
-                    }
-                    count = buffer_.GetLineCount() * count / 100;
-                }
-                window_.SetCursor(buffer_, {count - 1, 0}, false);
-                window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
-                window_.EnsureCursorVisible(buffer_);
                 Largely_Reset();
             }
             return;
-        case ActionKind::Jump_Max:
-            window_.SetCursor(buffer_, {buffer_.GetLineCount() - 1, 0}, false);
-            window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
-            window_.EnsureCursorVisible(buffer_);
-            Largely_Reset();
+
+        case ActionKind::Jump_To: // 确定3个参数 1.往什么方向跳跃 2.跳多少(缺省为1) 3.跳跃规则
+            if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+            {
+                switch (*editoraction_.type_)
+                {
+                case ActionType::Ordinary:
+                    if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value()) // 处理%
+                    {
+                        if (count > 100)
+                            count = 100;
+                        count = buffer_.GetLineCount() * count / 100;
+                        if (count == 0)
+                            count++;
+                    }
+                    window_.SetCursor(buffer_, {count - 1, 0}, false);
+                    window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
+                    break;
+                case ActionType::Max:
+                    window_.SetCursor(buffer_, {buffer_.GetLineCount() - 1, 0}, false);
+                    window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
+                    break;
+                }
+                window_.EnsureCursorVisible(buffer_);
+                Largely_Reset();
+            }
             return;
         case ActionKind::Match:
             Largely_Reset();
             return;
         case ActionKind::MergeLine: // 处理J
-            if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
+            for (index = 1; index <= count; index++)
             {
-                s_line = buffer_.GetLineAt(window_.GetCursor().row_);
-                if (s_line.size() > 0 && s_line[s_line.size() - 1] != ' ')
+                if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
                 {
-                    buffer_.InsertCharacter(window_.GetCursor().row_, s_line.size(), ' ');
-                    s_line = buffer_.GetLineAt(window_.GetCursor().row_ + 1);
-                    index = 0;
-                    while (index < s_line.size() && (s_line[index] == ' ' || s_line[index] == '\t'))
+                    s_line = buffer_.GetLineAt(window_.GetCursor().row_);
+                    if (s_line.size() > 0 && s_line[s_line.size() - 1] != ' ')
                     {
-                        index++;
-                        buffer_.EraseCharacter(window_.GetCursor().row_ + 1, index);
+                        buffer_.InsertCharacter(window_.GetCursor().row_, s_line.size(), ' ');
+                        s_line = buffer_.GetLineAt(window_.GetCursor().row_ + 1);
+                        index = 0;
+                        while (index < s_line.size() && (s_line[index] == ' ' || s_line[index] == '\t'))
+                        {
+                            index++;
+                            buffer_.EraseCharacter(window_.GetCursor().row_ + 1, index);
+                        }
+                        buffer_.JoinLine(window_.GetCursor().row_);
+                        window_.SetCursor(buffer_, window_.GetCursor(), false);
                     }
-                    buffer_.JoinLine(window_.GetCursor().row_);
-                    window_.SetCursor(buffer_, window_.GetCursor(), false);
-                    Largely_Reset();
-                    DealUndoList(now_cursor);
+                    Modified = true;
                 }
+                else
+                    break;
             }
+            Largely_Reset();
+            if (Modified)
+                DealUndoList(now_cursor);
             return;
-
         case ActionKind::InsertBefore:
             // 进入InsertMode,Editor自己就有对应方法
             EnterInsert(window_.GetCursor());
@@ -337,9 +339,7 @@ namespace sjtu
             window_.SetCursor(buffer_, window_.GetCursor(), true);
             EnterInsert(window_.GetCursor());
             return;
-
         case ActionKind::EnterCommandLine:
-
             // 进入Command Mode
             // 记得清空当前的message之类的遗留状态
             message_ = "";
@@ -496,11 +496,10 @@ namespace sjtu
         // 切换到Insert模式,设置插入位置并清除旧提示;允许光标停在行尾字符之后(清除旧提示还未完成)
         message_ = "";
         command_ = "";
-        window_.Renew_Lastparser();
-        window_.RenewCount(std::nullopt);
+        Largely_Reset();
         window_.SetCursor(buffer_, window_.GetCursor(), true);
-        normal_parser_.Reset_editoraction(editoraction_);
         mode_ = Mode::Insert;
+        last_cursor_=window_.GetCursor();
         return;
     }
 
@@ -509,7 +508,7 @@ namespace sjtu
         // 从插入位置回到Normal模式的字符位置:不在行首时先左移一列,再限制光标范围
         window_.ApplyMotion(buffer_, Motion::Left);
         window_.SetCursor(buffer_, window_.GetCursor(), false);
-        DealUndoList();
+        DealUndoList(last_cursor_);
         mode_ = Mode::Normal;
         return;
     }

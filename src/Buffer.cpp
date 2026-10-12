@@ -136,7 +136,7 @@ namespace sjtu
         }
     }
 
-    void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right)
+    void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right)//删除[left,right)的字母.
     {
         if (column_right <= column_left && column_left >= lines_[row].size())
         {

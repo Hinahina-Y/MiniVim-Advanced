@@ -36,6 +36,7 @@ enum class Mode {
     Normal,
     Insert,
     CommandLine,
+    Visual,
 };
 
 //Basic中支持的四个移动方向,可以由hjkl等按键生成
@@ -52,6 +53,7 @@ enum class Motion {
     Left_allow_crossline,
     Right_allow_crossline,
     Go_Delete,
+    Go_Indent,
 };
 
 //用于分门别类，比如是按字符移动还是按格子移动
@@ -62,6 +64,9 @@ enum class ActionType{
     Line,
     Delete,
     To,//以访问某个特定行或者特定列的方式执行这个ActionKind
+    Max,//以最大情况执行这个ActionKind
+    Min,//类似上
+    Match,//匹配
 };
 
 } // namespace sjtu

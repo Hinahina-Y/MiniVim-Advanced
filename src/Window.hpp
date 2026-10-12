@@ -23,9 +23,8 @@ public:
 
     void EnsureCursorVisible(const Buffer& buffer);
 
-    void Apply_d_Delete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
-
-    void ApplyDelete(Buffer &buffer,Motion motion);
+    void ApplyDelete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
+    void ApplyIndent(Buffer &buffer,Motion motion,std::optional<ActionType> type,bool Is_Indent);
 
     void RenewCount(std::optional<size_t> expected_count);//更新window里的剩余count值
     void Renew_Lastparser(char lastparser);//记录上一个按键
@@ -43,6 +42,7 @@ private:
     void MoveRight(const Buffer& buffer, size_t count);
     void MoveUp(const Buffer& buffer, size_t count);
     void MoveDown(const Buffer& buffer, size_t count);
+    void DeleteCharacters(Buffer &buffer,Motion motion); //一个更为具体的delete操作
 
     Position cursor_{}; //Buffer中的光标位置
     Viewport viewport_{}; //正文可见区域及其滚动偏移
