@@ -5,7 +5,6 @@
 #include <cctype>
 #include <exception>
 #include <time.h>
-
 // 以下提示均可用于Basic部分的实现,部分函数在Advanced部分中需要修改
 // 在该文件中,有些函数我们完整保留了正确的实现,有些函数去掉了一些,其余的完全需要你自己填写
 // 我选择按row,column都0-first,对需要部分(已知只有Terminal)我会加1.
@@ -66,7 +65,7 @@ namespace sjtu
         // 这里是你唯一需要调用Terminal中的接口的地方,请调用WriteOutput
         window_.Resize(terminal_.GetScreenSize());
         window_.EnsureCursorVisible(buffer_);
-        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, command_cursor}));
+        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, command_cursor, commandline_mode_}));
     }
 
     void Editor::Largely_Reset()
@@ -186,7 +185,7 @@ namespace sjtu
                     if (match_pos.row_ < buffer_.GetLineCount())
                         window_.SetCursor(buffer_, match_pos, false);
                     else
-                        message_ = "Error:Patterns not found";
+                        message_ = "Error:Patterns could not be found";
                     break;
                 }
                 window_.SetCursor(buffer_, window_.GetCursor(), false);
@@ -202,8 +201,7 @@ namespace sjtu
                         Handle_UndoAndRedo(editoraction_.kind_ == ActionKind::Redo);
                         break;
                     case ActionType::Line:
-                        if (Can_LineUndo)
-                            break;
+                        Handle_LineUndo();
                     }
                 }
                 return;
@@ -244,6 +242,10 @@ namespace sjtu
                 return;
             case ActionKind::Mark:
                 Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
+                return;
+            case ActionKind::Shift:
+                window_.ApplyShift(buffer_, *editoraction_.motion_);
+                Largely_Reset();
                 return;
             case ActionKind::MergeLine: // 处理J
                 for (index = 1; index <= count; index++)
@@ -326,6 +328,39 @@ namespace sjtu
                 commandline_mode_ = ":";
                 mode_ = Mode::CommandLine;
                 normal_parser_.Reset_editoraction(editoraction_);
+                return;
+            case ActionKind::Search:
+                if (editoraction_.into_mode_ == Mode::CommandLine)
+                {
+                    if (*editoraction_.motion_ == Motion::Left_allow_crossline)
+                        commandline_mode_ = "?";
+                    if (*editoraction_.motion_ == Motion::Right_allow_crossline)
+                        commandline_mode_ = "/";
+                    mode_ = Mode::CommandLine;
+                    Largely_Reset();
+                    return;
+                }
+                else
+                {
+                    if (!last_search_motion.has_value())
+                    {
+                        message_ = "Error:No searching history.";
+                        Largely_Reset();
+                        return;
+                    }
+                    if ((*editoraction_.motion_ == Motion::Up) ^ (*last_search_motion == Motion::Left_allow_crossline))
+                        window_.ApplySearch(buffer_, Motion::Right_allow_crossline, last_search_string);
+                    else
+                        window_.ApplySearch(buffer_, Motion::Left_allow_crossline, last_search_string);
+                }
+                return;
+            case ActionKind::Adjust:
+                if (editoraction_.type_.has_value() && editoraction_.motion_.has_value())
+                {
+                    window_.AdjustViewport(buffer_, *editoraction_.motion_, *editoraction_.type_);
+                    Largely_Reset();
+                    return;
+                }
                 return;
             }
         }
@@ -542,17 +577,13 @@ namespace sjtu
         if (editoraction_.count_.has_value() && *editoraction_.count_ > 1 && Insert_Keys_.size() > 0)
         {
             if (editoraction_.kind_ == ActionKind::InsertBefore && editoraction_.motion_ == Motion::Up)
-            {
                 Insert_Keys_.push_back({KeyCode::Enter, '\r'});
-            }
             size_t count = 1, expect_count = *editoraction_.count_;
             normal_parser_.Reset_editoraction(editoraction_);
             while (count < expect_count)
             {
                 for (size_t index = 0; index < Insert_Keys_.size(); index++)
-                {
                     HandleInsert(Insert_Keys_[index]);
-                }
                 count++;
             }
         }
@@ -576,7 +607,42 @@ namespace sjtu
             LeaveCommandLine();
             return;
         case KeyCode::Enter:
-            ExecuteCommandLine();
+            switch (commandline_mode_[0])
+            {
+            case ':':
+                ExecuteCommandLine();
+                break;
+            case '/':
+                if (command_ == "")
+                    break;
+                last_search_motion = Motion::Right_allow_crossline;
+                last_search_string = command_;
+                try
+                {
+                    window_.ApplySearch(buffer_, *last_search_motion, last_search_string);
+                }
+                catch (std::runtime_error &e)
+                {
+                    message_ = e.what();
+                }
+                break;
+            case '?':
+                if (command_ == "")
+                    break;
+                last_search_motion = Motion::Left_allow_crossline;
+                last_search_string = command_;
+                try
+                {
+                    window_.ApplySearch(buffer_, *last_search_motion, last_search_string);
+                }
+                catch (std::runtime_error &e)
+                {
+                    message_ = e.what();
+                }
+                break;
+            default:
+                break;
+            }
             LeaveCommandLine();
             return;
         case KeyCode::Backspace:

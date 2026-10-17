@@ -40,7 +40,9 @@ namespace sjtu
         // 总执行逻辑,根据Key和Mode分发给下属函数来处理
         void ProcessKey(KeyEvent key);
 
+        void DealUndoList(Position pos={0,0});//对UndoList处理，太长则删掉。pos用于更新撤回前的光标状态
         void Handle_UndoAndRedo(bool ruletype);//0撤回 1回退
+        void Handle_LineUndo();
 
         // ProcessKey的下属函数之一,Editor对NormalMode下的Action的执行,这个action是从parser传进来的
         void Execute(const EditorAction &action);
@@ -61,7 +63,7 @@ namespace sjtu
 
         bool SaveBuffer(const std::filesystem::path &path = {});
 
-        void DealUndoList(Position pos={0,0});//对UndoList处理，太长则删掉。pos用于更新撤回前的光标状态
+        
         
 
         Buffer buffer_;                  // 文件的实际内容
@@ -83,7 +85,13 @@ namespace sjtu
 
         std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符
 
+        std::map<char,std::vector<KeyEvent>> register_;//寄存器
+        char Using_register_name='\"';
+
         Position last_cursor_;
+
+        std::optional<Motion> last_search_motion{};
+        std::string last_search_string{""};
 
         //std::string LineUndo_;//for U
         //Position LineUndo_cursor_;

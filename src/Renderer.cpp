@@ -129,13 +129,14 @@ namespace sjtu
         {
             cursor_row = viewport.rows_;
             cursor_column = 1 + BufferColumnToRenderColumn(state.command_, state.command_cursor);
+            show_cursor_pos = std::to_string(BufferColumnToRenderColumn(state.command_, state.command_cursor) + 1) + "  "; // 进行展示光标位置
         }
         else
         {
             cursor_row = window.GetCursor().row_ - viewport.top_;
-            cursor_column = BufferColumnToRenderColumn(buffer.GetLineAt(window.GetCursor().row_), window.GetCursor().column_), -viewport.left_;
+            cursor_column = BufferColumnToRenderColumn(buffer.GetLineAt(window.GetCursor().row_), window.GetCursor().column_) - viewport.left_;
+            show_cursor_pos = std::to_string(window.GetCursor().row_ + 1) + "," + std::to_string(cursor_column + viewport.left_ + 1) + "  "; // 进行展示光标位置
         }
-        show_cursor_pos = std::to_string(cursor_row + 1) + "," + std::to_string(cursor_column + 1) + "  "; // 进行展示光标位置
 
         if (bottom.size() + show_cursor_pos.size() + bottomvalue.size() >= viewport.columns_)
         {

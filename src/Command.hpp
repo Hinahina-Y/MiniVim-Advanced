@@ -36,6 +36,11 @@ namespace sjtu
         Indent,//缩进
         Unindent,//减少缩进
         Mark,
+        Search,//搜索
+        Shift,//切换大小写
+        Copy,
+        Paste,
+        Adjust,//调整viewport
         Undefined,
         // 在Advanced部分中你很可能需要添加别的ActionKind
     };

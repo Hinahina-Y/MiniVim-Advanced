@@ -171,4 +171,19 @@ namespace sjtu
         window_.RenewCount(std::nullopt);
         normal_parser_.Reset_editoraction(editoraction_);
     }
+    void Editor::Handle_LineUndo()
+    {
+        window_.Renew_Lastparser();
+        size_t undocount{1};
+        size_t previous_position = undo_position_;
+        if (undo_position_ <= 1 || undo_list.size() == 0)
+        {
+            return;
+        }
+        buffer_.copyLine(undo_list[undo_position_-2].GetUndoLineAt(window_.GetCursor().row_),window_.GetCursor().row_);
+        window_.SetCursor(buffer_, window_.GetCursor(), false);
+        window_.RenewCount(std::nullopt);
+        normal_parser_.Reset_editoraction(editoraction_);
+        DealUndoList(window_.GetCursor());
+    }
 }

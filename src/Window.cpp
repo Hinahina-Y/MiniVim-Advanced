@@ -45,6 +45,14 @@ namespace sjtu
                 return 0;
             }
         }
+        char ShiftLetterCase(char c)
+        {
+            if (c >= 'a' && c <= 'z')
+                return c - 'a' + 'A';
+            if (c >= 'A' && c <= 'Z')
+                return c - 'A' + 'a';
+            return c;
+        }
     }
 
     void Window::Resize(ScreenSize terminal_size)
@@ -272,6 +280,23 @@ namespace sjtu
         }
     }
 
+    void Window::ApplyShift(Buffer &buffer, Motion motion)
+    {
+        size_t count{1};
+        if (remaining_count_.has_value())
+        {
+            count = *remaining_count_;
+        }
+        while (cursor_.column_ < buffer.GetLineAt(cursor_.row_).size() && count > 0)
+        {
+            buffer.ReplaceCharacter(cursor_.row_, cursor_.column_, Assist::ShiftLetterCase(buffer.GetLineAt(cursor_.row_)[cursor_.column_]));
+            count--;
+            cursor_.column_++;
+        }
+        SetCursor(buffer, cursor_, false);
+    }
+
+
     void Window::DeleteCharacters(Buffer &buffer, Motion motion)
     {
         size_t count{1};
@@ -437,12 +462,12 @@ namespace sjtu
                 if (Is_Indent)
                 {
                     buffer.InsertCharacters(cursor_.row_, 0, '\t', 2);
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 else
                 {
                     buffer.EraseIndent(cursor_.row_, 8);
-                    MoveLeft(buffer, 8);
+                    MoveLeft(buffer, 2);
                 }
                 break;
             case Motion::Left_allow_crossline:
@@ -455,7 +480,7 @@ namespace sjtu
                     {
                         buffer.InsertCharacters(row, 0, '\t', 2);
                     }
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 else
                 {
@@ -463,7 +488,7 @@ namespace sjtu
                     {
                         buffer.EraseIndent(row, 8);
                     }
-                    MoveLeft(buffer, 8);
+                    MoveLeft(buffer, 2);
                 }
                 break;
             case Motion::Down:
@@ -475,7 +500,7 @@ namespace sjtu
                     {
                         buffer.InsertCharacters(row, 0, '\t', 2);
                     }
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 else
                 {
@@ -483,19 +508,19 @@ namespace sjtu
                     {
                         buffer.EraseIndent(row, 8);
                     }
-                    MoveLeft(buffer, 8);
+                    MoveLeft(buffer, 2);
                 }
                 break;
             case Motion::Go_Indent:
                 if (Is_Indent)
                 {
                     buffer.InsertCharacters(cursor_.row_, 0, '\t', 2 * count);
-                    MoveRight(buffer, 8 * count);
+                    MoveRight(buffer, 2 * count);
                 }
                 else
                 {
                     buffer.EraseIndent(cursor_.row_, 8 * count);
-                    MoveLeft(buffer, 8 * count);
+                    MoveLeft(buffer, 2 * count);
                 }
             }
             break;
@@ -513,13 +538,13 @@ namespace sjtu
                 {
                     for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
                         buffer.InsertCharacters(row, 0, '\t', 2);
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 else
                 {
                     for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
                         buffer.EraseIndent(row, 8);
-                    MoveLeft(buffer, 8);
+                    MoveLeft(buffer, 2);
                 }
                 break;
             case Motion::Right:
@@ -529,13 +554,13 @@ namespace sjtu
                 {
                     for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
                         buffer.InsertCharacters(row, 0, '\t', 2);
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 else
                 {
                     for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
                         buffer.EraseIndent(row, 8);
-                    MoveRight(buffer, 8);
+                    MoveRight(buffer, 2);
                 }
                 break;
             }
@@ -550,13 +575,13 @@ namespace sjtu
             {
                 for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
                     buffer.InsertCharacters(row, 0, '\t', 2);
-                MoveRight(buffer, 8);
+                MoveRight(buffer, 2);
             }
             else
             {
                 for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
                     buffer.EraseIndent(row, 8);
-                MoveLeft(buffer, 8);
+                MoveLeft(buffer, 2);
             }
             break;
         }
@@ -574,13 +599,13 @@ namespace sjtu
             {
                 for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
                     buffer.InsertCharacters(row, 0, '\t', 2);
-                MoveRight(buffer, 8);
+                MoveRight(buffer, 2);
             }
             else
             {
                 for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
                     buffer.EraseIndent(row, 8);
-                MoveLeft(buffer, 8);
+                MoveLeft(buffer, 2);
             }
             break;
         }
@@ -631,6 +656,65 @@ namespace sjtu
         return temporary_window.GetCursor();
     }
 
+    Position Window::String_searching(const Buffer &buffer, Motion motion, std::string search_string)
+    {
+        Window temporary_window;
+        temporary_window.SetCursor(buffer, cursor_, true);
+        temporary_window.RenewCount(std::nullopt);
+        std::string_view line;
+        if (motion == Motion::Left_allow_crossline)
+        {
+            line = buffer.GetLineAt(temporary_window.cursor_.row_);
+            size_t findindex = line.find(search_string);
+            if (findindex != line.npos && findindex < temporary_window.cursor_.column_)
+                return {temporary_window.cursor_.row_, findindex};
+            while (temporary_window.cursor_.row_ > 0)
+            {
+                temporary_window.cursor_.row_--;
+                line = buffer.GetLineAt(temporary_window.cursor_.row_);
+                findindex = line.find(search_string);
+                if (findindex != line.npos)
+                    return {temporary_window.cursor_.row_, findindex};
+            }
+        }
+        else if (motion == Motion::Right_allow_crossline)
+        {
+            line = buffer.GetLineAt(temporary_window.cursor_.row_).substr(temporary_window.cursor_.column_ + 1);
+            size_t findindex = line.find(search_string);
+            if (findindex != line.npos)
+                return {temporary_window.cursor_.row_, findindex + temporary_window.cursor_.column_ + 1};
+            while (temporary_window.cursor_.row_ + 1 < buffer.GetLineCount())
+            {
+                temporary_window.cursor_.row_++;
+                line = buffer.GetLineAt(temporary_window.cursor_.row_);
+                findindex = line.find(search_string);
+                if (findindex != line.npos)
+                    return {temporary_window.cursor_.row_, findindex};
+            }
+        }
+        return {buffer.GetLineCount(), 0};
+    }
+
+    void Window::ApplySearch(Buffer &buffer, Motion motion, std::string search_string)
+    {
+        size_t count{1};
+        bool has_find = false;
+        if (remaining_count_.has_value())
+            count = *remaining_count_;
+        while (count--)
+        {
+            Position find_pos = String_searching(buffer, motion, search_string);
+            if (find_pos.row_ != buffer.GetLineCount())
+                SetCursor(buffer, find_pos, false);
+            else if (!has_find)
+                throw std::runtime_error("Error:Patterns could not be found!");
+            else
+                return;
+            has_find = true;
+        }
+        return;
+    }
+
     void Window::EnsureCursorVisible(const Buffer &buffer)
     {
         // 1. 光标高于或低于可见区域时,调整top_,使光标刚好进入区域
@@ -651,6 +735,127 @@ namespace sjtu
         else if (displayed_column >= viewport_.left_ + viewport_.columns_)
         {
             viewport_.left_ = displayed_column - viewport_.columns_ + 1;
+        }
+    }
+
+    
+    void Window::AdjustViewport(const Buffer &buffer, Motion motion, ActionType type)
+    {
+        size_t count{1};
+        if (remaining_count_.has_value())
+        {
+            count = *remaining_count_;
+        }
+        switch (type)
+        {
+        case ActionType::Ordinary:
+        {
+            switch (motion)
+            {
+            case Motion::Up:
+                if (viewport_.top_ > count)
+                    viewport_.top_ -= count;
+                else
+                    viewport_.top_ = 0;
+                if (cursor_.row_ >= viewport_.top_ + viewport_.rows_)
+                    cursor_.row_ = viewport_.top_ + viewport_.rows_ - 1;
+                else if (cursor_.row_ < viewport_.top_)
+                    cursor_.row_ = viewport_.top_;
+                SetCursor(buffer, cursor_, false);
+                break;
+            case Motion::Down:
+                if (viewport_.top_ + count < buffer.GetLineCount())
+                    viewport_.top_ += count;
+                else
+                    viewport_.top_ = buffer.GetLineCount() - 1;
+                if (cursor_.row_ >= viewport_.top_ + viewport_.rows_)
+                    cursor_.row_ = viewport_.top_ + viewport_.rows_ - 1;
+                else if (cursor_.row_ < viewport_.top_)
+                    cursor_.row_ = viewport_.top_;
+                SetCursor(buffer, cursor_, false);
+                break;
+            case Motion::Go_Up_Line:
+                if (viewport_.top_ > count * viewport_.rows_)
+                {
+                    viewport_.top_ -= count * viewport_.rows_;
+                    cursor_.row_ -= count * viewport_.rows_;
+                }
+                else
+                {
+                    cursor_.row_ -= viewport_.top_;
+                    viewport_.top_ = 0;
+                }
+                SetCursor(buffer, cursor_, false);
+                break;
+            case Motion::Go_Down_Line:
+                if (viewport_.top_ + count * viewport_.rows_ < buffer.GetLineCount())
+                {
+                    viewport_.top_ += count * viewport_.rows_;
+                    cursor_.row_ += count * viewport_.rows_;
+                }
+                else
+                {
+                    cursor_.row_ = buffer.GetLineCount() - 1;
+                    viewport_.top_ = buffer.GetLineCount() - 1;
+                }
+                SetCursor(buffer, cursor_, false);
+                break;
+            }
+        }
+        case ActionType::Half:
+        {
+            switch (motion)
+            {
+            case Motion::Go_Up_Line:
+                if (viewport_.top_ > viewport_.rows_ / 2)
+                {
+                    viewport_.top_ -= viewport_.rows_ / 2;
+                    cursor_.row_ -= viewport_.rows_ / 2;
+                }
+                else
+                {
+                    cursor_.row_ -= viewport_.top_;
+                    viewport_.top_ = 0;
+                }
+                SetCursor(buffer, cursor_, false);
+                break;
+            case Motion::Go_Down_Line:
+                if (viewport_.top_ + count * viewport_.rows_ / 2 < buffer.GetLineCount())
+                {
+                    viewport_.top_ += viewport_.rows_ / 2;
+                    cursor_.row_ += viewport_.rows_ / 2;
+                }
+                else
+                {
+                    cursor_.row_ = buffer.GetLineCount() - 1;
+                    viewport_.top_ = buffer.GetLineCount() - 1;
+                }
+                SetCursor(buffer, cursor_, false);
+                break;
+            case Motion::Goto_First_Noblank:
+                if (cursor_.row_ < viewport_.rows_ / 2)
+                    viewport_.top_ = 0;
+                else
+                    viewport_.top_ = cursor_.row_ - viewport_.rows_ / 2;
+                break;
+            }
+            break;
+        }
+        case ActionType::Max:
+        {
+            if (motion == Motion::Goto_First_Noblank)
+                viewport_.top_ = cursor_.row_;
+            break;
+        }
+        case ActionType::Min:
+            if (motion == Motion::Goto_First_Noblank)
+            {
+                if (viewport_.rows_ > cursor_.row_)
+                    viewport_.top_ = 0;
+                else
+                    viewport_.top_ = cursor_.row_  +1 - viewport_.rows_;
+            }
+            break;
         }
     }
 

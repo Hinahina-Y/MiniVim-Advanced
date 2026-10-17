@@ -100,6 +100,36 @@ namespace sjtu
                 return {ActionKind::Mark, std::nullopt, std::nullopt, std::nullopt};
             case '`':
                 return {ActionKind::Mark, std::nullopt, std::nullopt, ActionType::To};
+            case '~':
+                return {ActionKind::Shift, Motion::Right, std::nullopt, ActionType::Ordinary};
+            case 'y':
+                return {ActionKind::Copy, std::nullopt, std::nullopt, ActionType::Ordinary};
+            case 'Y':
+                return {ActionKind::Copy, Motion::Goto_Back, std::nullopt, ActionType::Ordinary};
+            case '/':
+                return {ActionKind::Search, Motion::Right_allow_crossline, std::nullopt, ActionType::Ordinary, Mode::CommandLine};
+            case '?':
+                return {ActionKind::Search, Motion::Left_allow_crossline, std::nullopt, ActionType::Ordinary, Mode::CommandLine};
+            case 'n':
+                return {ActionKind::Search, Motion::Up, std::nullopt, ActionType::Ordinary};
+            case 'N':
+                return {ActionKind::Search, Motion::Down, std::nullopt, ActionType::Ordinary};
+            case 'E' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Down, std::nullopt, ActionType::Ordinary};
+            case 'Y' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Down, std::nullopt, ActionType::Ordinary};
+            case 'D' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Go_Down_Line, std::nullopt, ActionType::Half};
+            case 'U' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Go_Up_Line, std::nullopt, ActionType::Half};
+            case 'F' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Go_Down_Line, std::nullopt, ActionType::Ordinary};
+            case 'B' & 0x1FU:
+                return {ActionKind::Adjust, Motion::Go_Up_Line, std::nullopt, ActionType::Ordinary};
+            case 'z':
+                return {ActionKind::Adjust, std::nullopt, std::nullopt, std::nullopt};
+            case 't': // 纯纯我们自己添加的，为了zt
+                return {ActionKind::None, std::nullopt, std::nullopt, ActionType::Max};
             default:
                 break;
             }
@@ -194,6 +224,8 @@ namespace sjtu
             case ActionKind::Unindent:
             case ActionKind::InsertBefore:
             case ActionKind::InsertAfter:
+            case ActionKind::Shift:
+            case ActionKind::Adjust:
                 if (editoraction_2.kind_ == ActionKind::Move && editoraction_2.type_.has_value() && *editoraction_2.type_ == ActionType::Match) // 特判%
                 {
                     editoraction_1.kind_ = ActionKind::Jump_To;
@@ -437,6 +469,27 @@ namespace sjtu
             Reset_editoraction(editoraction_1);
             editoraction_1.kind_ = ActionKind::Undefined;
             return;
+        }
+        if (editoraction_1.kind_ == ActionKind::Adjust) // z
+        {
+            if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 't'}))
+            {
+                editoraction_1.motion_ = Motion::Goto_First_Noblank;
+                editoraction_1.type_ = ActionType::Max;
+                return;
+            }
+            else if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'z'}))
+            {
+                editoraction_1.motion_ = Motion::Goto_First_Noblank;
+                editoraction_1.type_ = ActionType::Half;
+                return;
+            }
+            else if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'b'}))
+            {
+                editoraction_1.motion_ = Motion::Goto_First_Noblank;
+                editoraction_1.type_ = ActionType::Min;
+                return;
+            }
         }
         if (editoraction_1.kind_ != ActionKind::None) // 不存在的组合，认为输入错误，直接操作中断
         {

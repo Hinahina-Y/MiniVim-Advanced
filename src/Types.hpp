@@ -84,7 +84,8 @@ namespace sjtu
         Delete,
         To,    // 以访问某个特定行或者特定列的方式执行这个ActionKind
         Max,   // 以最大情况执行这个ActionKind
-        Min,   // 类似上
+        Min,
+        Half,  //只执行一半，无视count
         Match, // 匹配
     };
 
