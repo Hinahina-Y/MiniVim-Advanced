@@ -20,6 +20,7 @@ struct RenderState {
     std::string command_;
     std::string message_;
     size_t command_cursor{0};
+    std::string commandline_mode_{":"};
 };
 
 class Renderer {
@@ -30,6 +31,8 @@ public:
 private:
     //将一行内容展开为可显示的字符,主要处理Tab的宽度
     static std::string ExpandForDisplay(std::string_view line); 
+    //主要处理高亮
+    std::string DisplayHighlight(std::vector<std::pair<std::string, Position> >& Highlight,std::string line,Position start_pos,size_t length) const;
 };
 
 } // namespace sjtu

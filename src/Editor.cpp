@@ -1,4 +1,5 @@
 #include "Editor.hpp"
+#include "TextLayout.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -71,62 +72,6 @@ namespace sjtu
     void Editor::Largely_Reset()
     {
         window_.Renew_Lastparser();
-        window_.RenewCount(std::nullopt);
-        normal_parser_.Reset_editoraction(editoraction_);
-    }
-
-    void Editor::Handle_UndoAndRedo(bool ruletype)
-    {
-        window_.Renew_Lastparser();
-        size_t undocount{1};
-        size_t previous_position = undo_position_;
-        if (ruletype)
-        {
-            if (undo_position_ >= undo_list.size())
-            {
-                message_ = "No Undo Happened!";
-                return;
-            }
-            if (editoraction_.count_.has_value())
-            {
-                undocount = *editoraction_.count_;
-            }
-            if (undo_position_ + undocount >= undo_list.size() + 1)
-            {
-                message_ = "No enough undo,redo:" + std::to_string(undo_list.size() - undo_position_) + " steps";
-                undo_position_ = undo_list.size();
-            }
-            else
-            {
-                message_ = "Redo Succeed!";
-                undo_position_ += undocount;
-            }
-        }
-        else
-        {
-            if (undo_position_ == 0 || undo_list.size() == 0)
-            {
-                message_ = "No Change Happened!";
-                return;
-            }
-            if (editoraction_.count_.has_value())
-            {
-                undocount = *editoraction_.count_;
-            }
-            if (undo_position_ - 1 < undocount)
-            {
-                message_ = "No enough changes,undo:" + std::to_string(undo_position_ - 1) + " steps";
-                undo_position_ = 1;
-            }
-            else
-            {
-                message_ = "Undo Succeed!";
-                undo_position_ -= undocount;
-            }
-        }
-        message_ += "  " + undo_list[undo_position_ - 1].GetUndoTime(undo_list[previous_position - 1].GetTimeTag());
-        undo_list[undo_position_ - 1].ApplyUndo(buffer_, window_);
-        window_.SetCursor(buffer_, window_.GetCursor(), false);
         window_.RenewCount(std::nullopt);
         normal_parser_.Reset_editoraction(editoraction_);
     }
@@ -204,7 +149,7 @@ namespace sjtu
             return;
         }
         window_.RenewCount(editoraction_.count_); // 更新含[Count]的组合按键Count值
-        size_t count{1} , index{1};
+        size_t count{1}, index{1};
         bool Modified = false;
         std::string s_line;
         Position now_cursor = window_.GetCursor();
@@ -213,139 +158,148 @@ namespace sjtu
             count = *editoraction_.count_;
 
         // 根据Action的种类调用对应模块
-        switch (editoraction_.kind_)
+        try
         {
-        case ActionKind::None:
-            return;
-        case ActionKind::Move:
-            // 交给Window吧
-            if (!editoraction_.type_.has_value()) // 防止一些意外情况
+            switch (editoraction_.kind_)
             {
-                Largely_Reset();
-                message_ = "ERROR:UNKNOWN-Move without type.";
+            case ActionKind::None:
                 return;
-            }
-            switch (*editoraction_.type_)
-            {
-            case ActionType::Ordinary:
-                window_.ApplyMotion(buffer_, *editoraction_.motion_);
-                break;
-            case ActionType::word:
-                window_.ApplyMoveword(buffer_, *editoraction_.motion_, false);
-                break;
-            case ActionType::WORD:
-                window_.ApplyMoveword(buffer_, *editoraction_.motion_, true);
-                break;
-            }
-            window_.SetCursor(buffer_, window_.GetCursor(), false);
-            Largely_Reset();
-            return;
-        case ActionKind::Undo: // 处理撤回
-            Handle_UndoAndRedo(false);
-            return;
-        case ActionKind::Redo:
-            Handle_UndoAndRedo(true);
-            return;
-        case ActionKind::LineUndo: // U
-            if (Can_LineUndo)
-            {
-                buffer_.Achieve_LineUndo(LineUndo_cursor_.row_, LineUndo_);
-                window_.SetCursor(buffer_, LineUndo_cursor_, false);
-                DealUndoList(now_cursor);
-            } // 从本地Vim搞不懂到底实现了什么,所以先不实现，canlineundo恒为False
-        case ActionKind::Replace:
-            Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
-            return;
-        case ActionKind::Delete:
-            if (editoraction_.motion_.has_value() && editoraction_.type_.has_value()) // 确定三个参数，1.向哪个方向删，2.以什么规则删 3.删多少（缺省为1)
-            {
-                window_.ApplyDelete(buffer_, *editoraction_.motion_, editoraction_.type_);
-                window_.SetCursor(buffer_, window_.GetCursor(), false);
-                window_.EnsureCursorVisible(buffer_);
-                DealUndoList(now_cursor);
-                if (editoraction_.into_mode_ == Mode::Insert) // change
+            case ActionKind::Move:
+                // 交给Window吧
+                if (!editoraction_.type_.has_value()) // 防止一些意外情况
                 {
-                    EnterInsert(window_.GetCursor());
+                    Largely_Reset();
+                    message_ = "ERROR:UNKNOWN-Move (with no type).";
+                    return;
                 }
-                Largely_Reset();
-            }
-            return;
-
-        case ActionKind::Jump_To: // 确定3个参数 1.往什么方向跳跃 2.跳多少(缺省为1) 3.跳跃规则
-            if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
-            {
                 switch (*editoraction_.type_)
                 {
                 case ActionType::Ordinary:
-                    if (editoraction_.motion_ == Motion::Down && editoraction_.count_.has_value()) // 处理%
-                    {
-                        if (count > 100)
-                            count = 100;
-                        count = buffer_.GetLineCount() * count / 100;
-                        if (count == 0)
-                            count++;
-                    }
-                    window_.SetCursor(buffer_, {count - 1, 0}, false);
-                    window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
+                    window_.ApplyMotion(buffer_, *editoraction_.motion_);
                     break;
-                case ActionType::Max:
-                    window_.SetCursor(buffer_, {buffer_.GetLineCount() - 1, 0}, false);
-                    window_.ApplyMotion(buffer_, Motion::Goto_First_Noblank);
+                case ActionType::word:
+                case ActionType::WORD:
+                    window_.ApplyMoveword(buffer_, *editoraction_.motion_, *editoraction_.type_ == ActionType::WORD);
+                    break;
+                case ActionType::Match:
+                    Position match_pos = window_.Parenthesis_Matching(buffer_);
+                    if (match_pos.row_ < buffer_.GetLineCount())
+                    {
+                        window_.SetCursor(buffer_, match_pos, false);
+                    }
+                    else
+                    {
+                        message_ = "Error:Patterns not found";
+                    }
                     break;
                 }
-                window_.EnsureCursorVisible(buffer_);
+                window_.SetCursor(buffer_, window_.GetCursor(), false);
                 Largely_Reset();
-            }
-            return;
-        case ActionKind::Match:
-            Largely_Reset();
-            return;
-        case ActionKind::MergeLine: // 处理J
-            for (index = 1; index <= count; index++)
-            {
-                if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
+                return;
+            case ActionKind::Undo: // 处理撤回
+            case ActionKind::Redo: // 处理回退
+                if (editoraction_.type_.has_value())
                 {
-                    s_line = buffer_.GetLineAt(window_.GetCursor().row_);
-                    if (s_line.size() > 0 && s_line[s_line.size() - 1] != ' ')
+                    switch (*editoraction_.type_)
                     {
-                        buffer_.InsertCharacter(window_.GetCursor().row_, s_line.size(), ' ');
-                        s_line = buffer_.GetLineAt(window_.GetCursor().row_ + 1);
-                        index = 0;
-                        while (index < s_line.size() && (s_line[index] == ' ' || s_line[index] == '\t'))
-                        {
-                            index++;
-                            buffer_.EraseCharacter(window_.GetCursor().row_ + 1, index);
-                        }
-                        buffer_.JoinLine(window_.GetCursor().row_);
-                        window_.SetCursor(buffer_, window_.GetCursor(), false);
+                    case ActionType::Ordinary:
+                        Handle_UndoAndRedo(editoraction_.kind_ == ActionKind::Redo);
+                        break;
+                    case ActionType::Line:
+                        if (Can_LineUndo)
+                            break;
                     }
-                    Modified = true;
                 }
-                else
-                    break;
+                return;
+            case ActionKind::Replace:
+                Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
+                return;
+            case ActionKind::Delete:
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value()) // 确定三个参数，1.向哪个方向删，2.以什么规则删 3.删多少（缺省为1)
+                {
+                    window_.ApplyDelete(buffer_, *editoraction_.motion_, editoraction_.type_); // 真正的删除操作
+                    window_.SetCursor(buffer_, window_.GetCursor(), editoraction_.into_mode_ == Mode::Insert);
+                    window_.EnsureCursorVisible(buffer_);
+                    DealUndoList(now_cursor);
+                    if (editoraction_.into_mode_ == Mode::Insert) // change
+                        EnterInsert(window_.GetCursor());
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Jump_To: // 确定3个参数 1.往什么方向跳跃 2.跳多少(缺省为1) 3.跳跃规则
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    window_.ApplyJumpto(buffer_, *editoraction_.motion_, *editoraction_.type_);
+                    window_.SetCursor(buffer_, window_.GetCursor(), false); // 保险手段，虽然理论上在ApplyJumpto里已经设置好了光标
+                    window_.EnsureCursorVisible(buffer_);
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Indent:
+            case ActionKind::Unindent:
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    window_.ApplyIndent(buffer_, *editoraction_.motion_, *editoraction_.type_, editoraction_.kind_ == ActionKind::Indent);
+                    window_.SetCursor(buffer_, window_.GetCursor(), false);
+                    window_.EnsureCursorVisible(buffer_);
+                    DealUndoList(now_cursor);
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::MergeLine: // 处理J
+                for (index = 1; index <= count; index++)
+                {
+                    if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
+                    {
+                        s_line = buffer_.GetLineAt(window_.GetCursor().row_);
+                        if (s_line.size() > 0 && s_line[s_line.size() - 1] != ' ')
+                        {
+                            buffer_.InsertCharacter(window_.GetCursor().row_, s_line.size(), ' ');
+                            s_line = buffer_.GetLineAt(window_.GetCursor().row_ + 1);
+                            index = 0;
+                            while (index < s_line.size() && (s_line[index] == ' ' || s_line[index] == '\t'))
+                            {
+                                index++;
+                                buffer_.EraseCharacter(window_.GetCursor().row_ + 1, index);
+                            }
+                            buffer_.JoinLine(window_.GetCursor().row_);
+                            window_.SetCursor(buffer_, window_.GetCursor(), false);
+                        }
+                        Modified = true;
+                    }
+                    else
+                        break;
+                }
+                Largely_Reset();
+                if (Modified)
+                    DealUndoList(now_cursor);
+                return;
+            case ActionKind::InsertBefore:
+                // 进入InsertMode,Editor自己就有对应方法
+                EnterInsert(window_.GetCursor());
+                return;
+            case ActionKind::InsertAfter:
+                // 从当前Char之后进入InsertMode
+                // 特判:如果Buffer表示当前Cursor所在的行是空的怎么办?
+                window_.ApplyMotion(buffer_, Motion::Right);
+                window_.SetCursor(buffer_, window_.GetCursor(), true);
+                EnterInsert(window_.GetCursor());
+                return;
+            case ActionKind::EnterCommandLine:
+                // 进入Command Mode
+                // 记得清空当前的message之类的遗留状态
+                message_ = "";
+                command_ = "";
+                commandline_mode_ = ":";
+                mode_ = Mode::CommandLine;
+                normal_parser_.Reset_editoraction(editoraction_);
+                return;
             }
+        }
+        catch (const std::runtime_error &e)
+        {
             Largely_Reset();
-            if (Modified)
-                DealUndoList(now_cursor);
-            return;
-        case ActionKind::InsertBefore:
-            // 进入InsertMode,Editor自己就有对应方法
-            EnterInsert(window_.GetCursor());
-            return;
-        case ActionKind::InsertAfter:
-            // 从当前Char之后进入InsertMode
-            // 特判:如果Buffer表示当前Cursor所在的行是空的怎么办?
-            window_.ApplyMotion(buffer_, Motion::Right);
-            window_.SetCursor(buffer_, window_.GetCursor(), true);
-            EnterInsert(window_.GetCursor());
-            return;
-        case ActionKind::EnterCommandLine:
-            // 进入Command Mode
-            // 记得清空当前的message之类的遗留状态
-            message_ = "";
-            command_ = "";
-            mode_ = Mode::CommandLine;
-            normal_parser_.Reset_editoraction(editoraction_);
+            message_ = e.what();
             return;
         }
         Largely_Reset();
@@ -499,7 +453,7 @@ namespace sjtu
         Largely_Reset();
         window_.SetCursor(buffer_, window_.GetCursor(), true);
         mode_ = Mode::Insert;
-        last_cursor_=window_.GetCursor();
+        last_cursor_ = window_.GetCursor();
         return;
     }
 
@@ -513,7 +467,7 @@ namespace sjtu
         return;
     }
 
-    void Editor::HandleCommandLine(KeyEvent key)
+    void Editor::HandleCommandLine(KeyEvent key) // 主要完成输入
     {
         // 命令内容保存在command_中,不修改Buffer
         // Escape取消命令,Enter执行命令,Backspace/Delete删除末尾字符,可打印字符追加到末尾
@@ -533,6 +487,11 @@ namespace sjtu
             {
                 command_.erase(command_.begin() + command_cursor - 1);
                 command_cursor -= 1;
+            }
+            else if (command_.empty())
+            {
+                LeaveCommandLine();
+                return;
             }
             break;
         case KeyCode::Character:
@@ -667,51 +626,6 @@ namespace sjtu
         }
         message_ = "File Name:" + buffer_.GetDisplayName() + " total lines:" + std::to_string(total_lines);
         return true;
-    }
-
-    void Editor::DealUndoList(Position pos)
-    {
-        bool is_modified = false;
-        if (!undo_list.empty())
-        {
-            is_modified = true;
-            if (undo_list[undo_position_ - 1].GetUndoLineCount() != buffer_.GetLineCount())
-            {
-                is_modified = false;
-            }
-            else
-            {
-                for (size_t i = 0; i < undo_list[undo_position_ - 1].GetUndoLineCount(); i++)
-                {
-                    if (undo_list[undo_position_ - 1].GetUndoLineAt(i) != buffer_.GetLineAt(i))
-                    {
-                        is_modified = false;
-                        break;
-                    }
-                }
-            }
-        }
-        if (is_modified)
-        {
-            return;
-        }
-        UnDo_ReDo u_r;
-        u_r.Get_Do_Information(buffer_, window_);
-        if (undo_position_ < undo_list.size())
-        {
-            undo_list.erase(undo_list.begin() + undo_position_, undo_list.end());
-        }
-        undo_list.push_back(u_r);
-        undo_position_++;
-        while (undo_list.size() > 100 && undo_position_ != 0)
-        {
-            undo_list.erase(undo_list.begin());
-            undo_position_--;
-        }
-        if (undo_list.size() > 1 && undo_position_ > 1)
-        {
-            undo_list[undo_position_ - 2].Renew_Position(pos);
-        }
     }
 
 } // namespace sjtu

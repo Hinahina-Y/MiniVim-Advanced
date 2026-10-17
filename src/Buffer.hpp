@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <vector>
 
+
 namespace sjtu
 {
     class Buffer
@@ -26,10 +27,12 @@ namespace sjtu
         void copyBuffer(const std::vector<std::string>& lines);
 
         void InsertCharacter(std::size_t row, std::size_t column, char value);
+        void InsertCharacters(std::size_t row, std::size_t column, char value,size_t sum);//插入sum个value
         void EraseCharacter(std::size_t row, std::size_t column);
         void EraseLines(std::size_t row_up,std::size_t row_down);//删除行[row_up,row_down)
         void EraseCharacters(std::size_t row,std::size_t column_left,std::size_t column_right);//删除[left,right)的字母.
         void EraseCharacters(std::size_t row_left,std::size_t column_left,std::size_t row_right,std::size_t column_right);//删除[left,right)的字母.
+        void EraseIndent(std::size_t row,size_t sum);
         void ReplaceCharacter(std::size_t row,std::size_t column,char value);//替换字符
         void SplitLine(std::size_t row, std::size_t column);
         void JoinLine(std::size_t row);

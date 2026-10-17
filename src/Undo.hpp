@@ -6,6 +6,7 @@
 
 #include "Buffer.hpp"
 #include "Types.hpp"
+#include "Mark.hpp"
 #include "Command.hpp"
 #include "Window.hpp"
 
@@ -27,9 +28,9 @@ namespace sjtu
     private:
         Position pos_;
         std::vector<std::string> Undo_lines_;
-        std::vector<int> ApplyKind_; // 对于一些简单操作，我们可以试图在后续进行优化，而不是每次都存储全文
         EditorAction ActionWay_;
         std::time_t Timetag_;
+        Mark undo_mark_;
     };
 
 }

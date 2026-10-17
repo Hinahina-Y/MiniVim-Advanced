@@ -1,6 +1,7 @@
 #include <fstream>
 
 #include "Buffer.hpp"
+#include "TextLayout.hpp"
 
 namespace sjtu
 {
@@ -45,7 +46,12 @@ namespace sjtu
     }
 
     const std::string &Buffer::GetLineAt(std::size_t row) const
-    {
+    {   
+        if(row>=lines_.size())
+        {
+            static const std::string emptyLine="";
+            return emptyLine;
+        }
         // 返回第row行的内容
         return lines_[row];
     }
@@ -98,9 +104,21 @@ namespace sjtu
         if (row >= lines_.size() || column > lines_[row].size() + 1)
         {
             // 越界,暂时不知道如何处理
+            return;
         }
         lines_[row].insert(lines_[row].begin() + column, value);
         // 在第row行第col列插入一个value, 注意越界检查
+        return;
+    }
+
+    void Buffer::InsertCharacters(std::size_t row, std::size_t column, char value, size_t sum = 1)
+    {
+        if (row >= lines_.size() || column > lines_[row].size() + 1)
+        {
+            return;
+        }
+        lines_[row].insert(lines_[row].begin() + column, sum, value);
+        // 在第row行第col列插入sum个value, 注意越界检查
         return;
     }
 
@@ -136,7 +154,7 @@ namespace sjtu
         }
     }
 
-    void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right)//删除[left,right)的字母.
+    void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right) // 删除[left,right)的字母.
     {
         if (column_right <= column_left && column_left >= lines_[row].size())
         {
@@ -201,6 +219,25 @@ namespace sjtu
             if (crossline)
                 JoinLine(row_left);
         }
+    }
+
+    void Buffer::EraseIndent(std::size_t row,size_t sum)//第row行s删除sum列的缩进，一个缩进是8列
+    {
+        size_t count{0};
+        if(row>=lines_.size())
+        {
+            return;
+        }
+        while(count<sum)
+        {
+            if(lines_[row].size()==0||(lines_[row][0]!='\t'&&lines_[row][0]!=' '))
+            {
+                return;
+            }
+            count=NextScreenColumn(count,lines_[row][0]);
+            EraseCharacter(row,1);
+        }
+        return;
     }
 
     void Buffer::ReplaceCharacter(std::size_t row, std::size_t column, char value)

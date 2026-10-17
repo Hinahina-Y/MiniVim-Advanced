@@ -45,11 +45,11 @@ namespace sjtu
             case '^':
                 return GenerateMotion(Motion::Goto_First_Noblank);
             case 'u':
-                return GenerateCommand(ActionKind::Undo);
+                return {ActionKind::Undo, std::nullopt, std::nullopt, ActionType::Ordinary};
             case 'r' & 0x1FU: // ctrl+r
-                return GenerateCommand(ActionKind::Redo);
+                return {ActionKind::Redo, std::nullopt, std::nullopt, ActionType::Ordinary};
             case 'U':
-                return GenerateCommand(ActionKind::LineUndo);
+                return {ActionKind::Undo, std::nullopt, std::nullopt, ActionType::Line};
             case 'r':
                 return GenerateCommand(ActionKind::Replace);
             case 'x':
@@ -75,7 +75,7 @@ namespace sjtu
             case 'W':
                 return {ActionKind::Move, Motion::Right, std::nullopt, ActionType::WORD};
             case '%':
-                return {ActionKind::Match, std::nullopt, std::nullopt, ActionType::Ordinary};
+                return {ActionKind::Move, std::nullopt, std::nullopt, ActionType::Match};
             case 'd':
                 return {ActionKind::Delete, std::nullopt, std::nullopt, std::nullopt};
             case 'D':
@@ -85,9 +85,9 @@ namespace sjtu
             case 'C':
                 return {ActionKind::Delete, Motion::Goto_Back, std::nullopt, ActionType::Ordinary, Mode::Insert};
             case '>':
-                return {ActionKind::Indent,std::nullopt,std::nullopt,std::nullopt};
+                return {ActionKind::Indent, std::nullopt, std::nullopt, std::nullopt};
             case '<':
-                return {ActionKind::Unindent,std::nullopt,std::nullopt,std::nullopt};
+                return {ActionKind::Unindent, std::nullopt, std::nullopt, std::nullopt};
             default:
                 break;
             }
@@ -178,6 +178,16 @@ namespace sjtu
             {
             case ActionKind::Move:
             case ActionKind::Delete:
+            case ActionKind::Indent:
+            case ActionKind::Unindent:
+                if (editoraction_2.kind_ == ActionKind::Move && editoraction_2.type_.has_value() && *editoraction_2.type_ == ActionType::Match) // 特判%
+                {
+                    editoraction_1.kind_ = ActionKind::Jump_To;
+                    editoraction_1.motion_ = Motion::Down;
+                    editoraction_1.type_ = editoraction_2.type_;
+                    editoraction_1.into_mode_ = editoraction_2.into_mode_;
+                    return true;
+                }
                 editoraction_1.kind_ = editoraction_2.kind_;
                 editoraction_1.motion_ = editoraction_2.motion_;
                 editoraction_1.type_ = editoraction_2.type_;
@@ -205,12 +215,6 @@ namespace sjtu
                 editoraction_1.type_ = editoraction_2.type_;
                 editoraction_1.into_mode_ = editoraction_2.into_mode_;
                 return true;
-            case ActionKind::Match:
-                editoraction_1.kind_ = ActionKind::Jump_To;
-                editoraction_1.motion_ = Motion::Down;
-                editoraction_1.type_ = editoraction_2.type_;
-                editoraction_1.into_mode_ = editoraction_2.into_mode_;
-                return true;
             }
         }
         return false;
@@ -225,9 +229,7 @@ namespace sjtu
             {
             case ActionType::To:                                                       // dg
                 if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'g'})) // dgg
-                {
-                    editoraction_1.motion_ = Motion::Goto_Front;
-                }
+                    editoraction_1.motion_ = Motion::Goto_First_Noblank;
                 else if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'e'})) // dge
                 {
                     editoraction_1.motion_ = Motion::Left;
@@ -263,15 +265,10 @@ namespace sjtu
         if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'G'})) // d+([num])+G
         {
             if (editoraction_1.count_.has_value())
-            {
-                editoraction_1.motion_ = Motion::Goto_Front;
                 editoraction_1.type_ = ActionType::To;
-            }
             else
-            {
-                editoraction_1.motion_ = Motion::Goto_Back;
                 editoraction_1.type_ = ActionType::Max;
-            }
+            editoraction_1.motion_ = Motion::Goto_First_Noblank;
             return true;
         }
         if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, '%'})) // d+([num])+%
@@ -314,16 +311,14 @@ namespace sjtu
 
     bool NormalModeParser::Merge_editoraction_indent(EditorAction &editoraction_1, const EditorAction &editoraction_2)
     {
-        // 大部分情况，我们可以将c和d等价处理，C与D等价处理，except for cc dd
+        // 大部分情况，我们可以将< 和 >对等处理
         if (editoraction_1.type_.has_value()) // 已经不是单<的情况了 如dg
         {
             switch (*editoraction_1.type_)
             {
             case ActionType::To:                                                       // +g
                 if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'g'})) // +gg
-                {
-                    editoraction_1.motion_ = Motion::Goto_Front;
-                }
+                    editoraction_1.motion_ = Motion::Goto_First_Noblank;
                 return true;
             }
             return false;
@@ -349,15 +344,10 @@ namespace sjtu
         if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'G'})) // +([num])+G
         {
             if (editoraction_1.count_.has_value())
-            {
-                editoraction_1.motion_ = Motion::Goto_Front;
                 editoraction_1.type_ = ActionType::To;
-            }
             else
-            {
-                editoraction_1.motion_ = Motion::Goto_Back;
                 editoraction_1.type_ = ActionType::Max;
-            }
+            editoraction_1.motion_ = Motion::Goto_First_Noblank;
             return true;
         }
         if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, '%'})) // +([num])+%
@@ -410,6 +400,11 @@ namespace sjtu
             if (Merge_editoraction_delete(editoraction_1, editoraction_2))
                 return;
         }
+        if (editoraction_1.kind_ == ActionKind::Indent || editoraction_1.kind_ == ActionKind::Unindent) // 处理d+[x]
+        {
+            if (Merge_editoraction_indent(editoraction_1, editoraction_2))
+                return;
+        }
         if (editoraction_1.kind_ == ActionKind::Jump_To) // 处理g+[x]
         {
             if (EditorAction_Equal_Key(editoraction_2, {KeyCode::Character, 'g'})) // ([num]+)gg
@@ -427,10 +422,6 @@ namespace sjtu
             }
             Reset_editoraction(editoraction_1);
             editoraction_1.kind_ = ActionKind::Undefined;
-            return;
-        }
-        if (editoraction_1.kind_ == ActionKind::LineUndo)
-        {
             return;
         }
         if (editoraction_1.kind_ != ActionKind::None) // 不存在的组合，认为输入错误，直接操作中断

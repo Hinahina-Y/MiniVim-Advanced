@@ -12,6 +12,11 @@ Window保存光标位置和正文的可见区域,根据Buffer的行数和行长�
 
 namespace sjtu {
 
+namespace Assist{// 一些辅助函数
+    int WordJudge(char c, bool rule_type);
+    int Braces(char c);
+}
+
 class Window {
 
 public:
@@ -21,10 +26,15 @@ public:
 
     void ApplyMoveword(const Buffer& buffer, Motion motion,bool rule_type);
 
+    void ApplyJumpto(const Buffer& buffer, Motion motion,ActionType type);
+    
+    Position Parenthesis_Matching(const Buffer& buffer) const;
+
     void EnsureCursorVisible(const Buffer& buffer);
 
     void ApplyDelete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
     void ApplyIndent(Buffer &buffer,Motion motion,std::optional<ActionType> type,bool Is_Indent);
+
 
     void RenewCount(std::optional<size_t> expected_count);//更新window里的剩余count值
     void Renew_Lastparser(char lastparser);//记录上一个按键

@@ -26,17 +26,16 @@ namespace sjtu
         EnterCommandLine,
         Undo,
         Redo,
-        LineUndo,
         Replace,//替代
         Backspace,//回退
         Delete,//删除
         Jump_To,//跳转至
-        Match,//匹配 only for%
         MergeLine,//合并两行 only for J
         Move_word,//按词移动
         Move_WORD,//按WORD移动
         Indent,//缩进
         Unindent,//减少缩进
+        Mark,
         Undefined,
         // 在Advanced部分中你很可能需要添加别的ActionKind
     };

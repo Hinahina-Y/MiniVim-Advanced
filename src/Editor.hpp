@@ -16,6 +16,7 @@ Editor负责协调各个模块,保存当前模式,并根据输入调用Buffer和
 #include "Types.hpp"
 #include "Window.hpp"
 #include "Undo.hpp"
+#include "Mark.hpp"
 
 namespace sjtu
 {
@@ -54,6 +55,7 @@ namespace sjtu
         void HandleInsert(KeyEvent key);
 
         // ProcessKey的下属函数之一,Editor在CommandMode下对于KeyEvent的处理逻辑
+        
         void HandleCommandLine(KeyEvent key);
         void ExecuteCommandLine();
         void LeaveCommandLine();
@@ -73,6 +75,7 @@ namespace sjtu
         Mode mode_{Mode::Normal}; // 当前编辑模式
         std::string command_;     // 命令行模式下已经输入的内容,不含开头的冒号
         size_t command_cursor{0}; // 命令行内容的光标
+        std::string commandline_mode_{":"};//我们认为搜索操作也是在命令行完成的
         std::string message_;     // 底部的提示或错误信息
         bool running_{true};      // 设为false后结束主循环
 
@@ -81,8 +84,10 @@ namespace sjtu
         std::vector<UnDo_ReDo> undo_list; // 用于撤销
         size_t undo_position_{0};         // 记录现在撤销了几次
 
-        std::string LineUndo_;//for U
-        Position LineUndo_cursor_;
+        Mark mark_;
+
+        //std::string LineUndo_;//for U
+        //Position LineUndo_cursor_;
         bool Can_LineUndo{false};
 
         bool Need_Arguments_{false};    //是否需要参数，暂定Normal模式下参数只会是一个字符

@@ -7,7 +7,7 @@
 namespace sjtu
 {
 
-    namespace // 一些辅助函数
+    namespace Assist // 一些辅助函数
     {
         int WordJudge(char c, bool rule_type) // 0word 1WORD
         {
@@ -24,6 +24,26 @@ namespace sjtu
                 return 1;
             }
             return 2;
+        }
+        int Braces(char c)
+        {
+            switch (c)
+            {
+            case '(':
+                return 1;
+            case ')':
+                return -1;
+            case '[':
+                return 2;
+            case ']':
+                return -2;
+            case '{':
+                return 3;
+            case '}':
+                return -3;
+            default:
+                return 0;
+            }
         }
     }
 
@@ -159,7 +179,7 @@ namespace sjtu
         }
         line = buffer.GetLineAt(cursor_.row_);
         line += " ";
-        IsOneWord = WordJudge(line[cursor_.column_], rule_type);
+        IsOneWord = Assist::WordJudge(line[cursor_.column_], rule_type);
         while (count > 0 && !Meet_Boundary)
         {
             if (motion == Motion::Right || motion == Motion::Down)
@@ -194,15 +214,15 @@ namespace sjtu
                 }
                 cursor_.column_--;
             }
-            if (WordJudge(line[cursor_.column_], rule_type) != IsOneWord && (((IsOneWord != 0) && (motion == Motion::Down || motion == Motion::Up)) || ((IsOneWord != 1) && !(motion == Motion::Down || motion == Motion::Up))))
+            if (Assist::WordJudge(line[cursor_.column_], rule_type) != IsOneWord && (((IsOneWord != 0) && (motion == Motion::Down || motion == Motion::Up)) || ((IsOneWord != 1) && !(motion == Motion::Down || motion == Motion::Up))))
             {
                 count--;
             }
-            else if (WordJudge(line[cursor_.column_], rule_type) == 2 || IsOneWord == 2)
+            else if (Assist::WordJudge(line[cursor_.column_], rule_type) == 2 || IsOneWord == 2)
             {
                 count--;
             }
-            IsOneWord = WordJudge(line[cursor_.column_], rule_type);
+            IsOneWord = Assist::WordJudge(line[cursor_.column_], rule_type);
         }
         if (!Meet_Boundary && motion == Motion::Down)
         {
@@ -214,6 +234,42 @@ namespace sjtu
             ApplyMotion(buffer, Motion::Right_allow_crossline);
         }
         SetCursor(buffer, cursor_, false);
+    }
+
+    void Window::ApplyJumpto(const Buffer &buffer, Motion motion, ActionType type) // 跳转至
+    {
+        size_t count{1};
+        if (remaining_count_.has_value())
+            count = *remaining_count_;
+        switch (type)
+        {
+        case ActionType::Ordinary:
+        case ActionType::To:
+            switch (motion)
+            {
+            case Motion::Down:
+                if (count > 100)
+                    count = 100;
+                count = count * buffer.GetLineCount() / 100;
+                if (count == 0)
+                    count++;
+                [[fallthrough]];
+            case Motion::Goto_First_Noblank:
+                SetCursor(buffer, {count - 1, 0}, false);
+                ApplyMotion(buffer, Motion::Goto_First_Noblank);
+                break;
+            }
+            break;
+        case ActionType::Max:
+            switch (motion)
+            {
+            case Motion::Goto_First_Noblank:
+                SetCursor(buffer, {buffer.GetLineCount() - 1, 0}, false);
+                ApplyMotion(buffer, Motion::Goto_First_Noblank);
+                break;
+            }
+            break;
+        }
     }
 
     void Window::DeleteCharacters(Buffer &buffer, Motion motion)
@@ -282,59 +338,30 @@ namespace sjtu
             break;
         }
         case ActionType::word:
-        {
-            Position previous_cursor_{cursor_};
-            switch (motion)
-            {
-            case Motion::Left:
-                ApplyMoveword(buffer, motion, false);
-                buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
-                cursor_.column_++;
-                SetCursor(buffer, cursor_, false);
-                break;
-            case Motion::Right:
-                ApplyMoveword(buffer, motion, false);
-                buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_);
-                SetCursor(buffer, previous_cursor_, false);
-                break;
-            case Motion::Up:
-                ApplyMoveword(buffer, motion, false);
-                buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
-                cursor_.column_++;
-                SetCursor(buffer, cursor_, false);
-                break;
-            case Motion::Down:
-                ApplyMoveword(buffer, motion, false);
-                buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_ + 1);
-                SetCursor(buffer, previous_cursor_, false);
-                break;
-            }
-            break;
-        }
         case ActionType::WORD:
         {
             Position previous_cursor_{cursor_};
             switch (motion)
             {
             case Motion::Left:
-                ApplyMoveword(buffer, motion, true);
-                buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
+                buffer.EraseCharacters(cursor_.row_, cursor_.column_, previous_cursor_.row_, previous_cursor_.column_);
                 cursor_.column_++;
                 SetCursor(buffer, cursor_, false);
                 break;
             case Motion::Right:
-                ApplyMoveword(buffer, motion, true);
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
                 buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_);
                 SetCursor(buffer, previous_cursor_, false);
                 break;
             case Motion::Up:
-                ApplyMoveword(buffer, motion, true);
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
                 buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
                 cursor_.column_++;
                 SetCursor(buffer, cursor_, false);
                 break;
             case Motion::Down:
-                ApplyMoveword(buffer, motion, true);
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
                 buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_ + 1);
                 SetCursor(buffer, previous_cursor_, false);
                 break;
@@ -342,40 +369,48 @@ namespace sjtu
             break;
         }
         case ActionType::To:
+        case ActionType::Max: // Delete Max行为未定义，所以直接归结到JumpMAX里，节省分类成本
         {
-            switch (motion)
+            Position previous_cursor_{cursor_};
+            ApplyJumpto(buffer, motion, *type);
+            if (cursor_.row_ >= previous_cursor_.row_)
             {
-            case Motion::Down:
-                if (count > 100)
-                    count = 100;
-                count = count * buffer.GetLineCount() / 100;
-                if (count == 0)
-                    count++;
-                [[fallthrough]];
-            case Motion::Goto_Front:
-                if (count > cursor_.row_ + 1)
-                {
-                    buffer.EraseLines(cursor_.row_, count);
-                    SetCursor(buffer, {cursor_.row_, 0}, false);
-                }
-                else
-                {
-                    buffer.EraseLines(count - 1, cursor_.row_ + 1);
-                    SetCursor(buffer, {count - 1, 0}, false);
-                }
-                break;
+                buffer.EraseLines(previous_cursor_.row_, cursor_.row_ + 1);
+                SetCursor(buffer, {previous_cursor_.row_, 0}, false);
             }
-        }
-        case ActionType::Max:
-        {
-            switch (motion)
+            else
             {
-            case Motion::Goto_Back:
-
-                buffer.EraseLines(cursor_.row_, buffer.GetLineCount());
+                buffer.EraseLines(cursor_.row_, previous_cursor_.row_ + 1);
                 SetCursor(buffer, {cursor_.row_, 0}, false);
+            }
+            break;
+        }
+        case ActionType::Delete: // Del
+        {
+            switch (motion)
+            {
+            case Motion::Right:
+                DeleteCharacters(buffer, motion);
                 break;
             }
+            break;
+        }
+        case ActionType::Match:
+        {
+            Position previous_cursor_{cursor_};
+            Position match_pos = Parenthesis_Matching(buffer);
+            if (match_pos.row_ >= buffer.GetLineCount())
+            {
+                throw std::runtime_error("Error:Patterns not found");
+                return;
+            }
+            if (previous_cursor_ < match_pos)
+            {
+                std::swap(match_pos, previous_cursor_);
+            }
+            buffer.EraseCharacters(match_pos.row_, match_pos.column_, previous_cursor_.row_, previous_cursor_.column_ + 1);
+            SetCursor(buffer, match_pos, false);
+            break;
         }
         }
     }
@@ -392,20 +427,22 @@ namespace sjtu
         {
         case ActionType::Ordinary:
         {
+            Position previous_cursor_{cursor_};
             switch (motion)
             {
-                Position previous_cursor_{cursor_};
             case Motion::Goto_Back:
             case Motion::Goto_Front:
             case Motion::Left:
             case Motion::Right:
                 if (Is_Indent)
                 {
-                    buffer.InsertCharacter(cursor_.row_, 0, '\t\t');
-                    cursor_.column_ += 8;
+                    buffer.InsertCharacters(cursor_.row_, 0, '\t', 2);
+                    MoveRight(buffer, 8);
                 }
                 else
                 {
+                    buffer.EraseIndent(cursor_.row_, 8);
+                    MoveLeft(buffer, 8);
                 }
                 break;
             case Motion::Left_allow_crossline:
@@ -416,12 +453,17 @@ namespace sjtu
                 {
                     for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
                     {
-                        buffer.InsertCharacter(row, 0, '\t\t');
+                        buffer.InsertCharacters(row, 0, '\t', 2);
                     }
-                    cursor_.column_ += 8;
+                    MoveRight(buffer, 8);
                 }
                 else
                 {
+                    for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
+                    {
+                        buffer.EraseIndent(row, 8);
+                    }
+                    MoveLeft(buffer, 8);
                 }
                 break;
             case Motion::Down:
@@ -429,119 +471,164 @@ namespace sjtu
                 desired_column_ = 0; // 处理一下期望列
                 if (Is_Indent)
                 {
-
                     for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
                     {
-                        buffer.InsertCharacter(row, 0, '\t\t');
+                        buffer.InsertCharacters(row, 0, '\t', 2);
                     }
-                    cursor_.column_ += 8;
+                    MoveRight(buffer, 8);
                 }
                 else
                 {
+                    for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
+                    {
+                        buffer.EraseIndent(row, 8);
+                    }
+                    MoveLeft(buffer, 8);
                 }
                 break;
+            case Motion::Go_Indent:
+                if (Is_Indent)
+                {
+                    buffer.InsertCharacters(cursor_.row_, 0, '\t', 2 * count);
+                    MoveRight(buffer, 8 * count);
+                }
+                else
+                {
+                    buffer.EraseIndent(cursor_.row_, 8 * count);
+                    MoveLeft(buffer, 8 * count);
+                }
             }
             break;
         }
         case ActionType::word:
-        {
-            Position previous_cursor_{cursor_};
-            switch (motion)
-            {
-            case Motion::Left:
-            case Motion::Up:
-                ApplyMoveword(buffer, motion, false);
-                if(Is_Indent)
-                {
-
-                }
-                else
-                {
-                    
-                }
-                break;
-            case Motion::Right:
-            case Motion::Down:
-                ApplyMoveword(buffer, motion, false);
-                if(Is_Indent)
-                {
-
-                }
-                else
-                {
-
-                }
-                break;
-            }
-            break;
-        }
         case ActionType::WORD:
         {
             Position previous_cursor_{cursor_};
             switch (motion)
             {
             case Motion::Left:
-                ApplyMoveword(buffer, motion, true);
-                buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
-                cursor_.column_++;
-                SetCursor(buffer, cursor_, false);
+            case Motion::Up:
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
+                if (Is_Indent)
+                {
+                    for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
+                        buffer.InsertCharacters(row, 0, '\t', 2);
+                    MoveRight(buffer, 8);
+                }
+                else
+                {
+                    for (size_t row = cursor_.row_; row <= previous_cursor_.row_; row++)
+                        buffer.EraseIndent(row, 8);
+                    MoveLeft(buffer, 8);
+                }
                 break;
             case Motion::Right:
-                ApplyMoveword(buffer, motion, true);
-                buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_);
-                SetCursor(buffer, previous_cursor_, false);
-                break;
-            case Motion::Up:
-                ApplyMoveword(buffer, motion, true);
-                buffer.EraseCharacters(cursor_.row_, cursor_.column_ + 1, previous_cursor_.row_, previous_cursor_.column_);
-                cursor_.column_++;
-                SetCursor(buffer, cursor_, false);
-                break;
             case Motion::Down:
-                ApplyMoveword(buffer, motion, true);
-                buffer.EraseCharacters(previous_cursor_.row_, previous_cursor_.column_, cursor_.row_, cursor_.column_ + 1);
-                SetCursor(buffer, previous_cursor_, false);
+                ApplyMoveword(buffer, motion, *type == ActionType::WORD);
+                if (Is_Indent)
+                {
+                    for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
+                        buffer.InsertCharacters(row, 0, '\t', 2);
+                    MoveRight(buffer, 8);
+                }
+                else
+                {
+                    for (size_t row = previous_cursor_.row_; row <= cursor_.row_; row++)
+                        buffer.EraseIndent(row, 8);
+                    MoveRight(buffer, 8);
+                }
                 break;
             }
             break;
         }
         case ActionType::To:
-        {
-            switch (motion)
-            {
-            case Motion::Down:
-                if (count > 100)
-                    count = 100;
-                count = count * buffer.GetLineCount() / 100;
-                if (count == 0)
-                    count++;
-                [[fallthrough]];
-            case Motion::Goto_Front:
-                if (count > cursor_.row_ + 1)
-                {
-                    buffer.EraseLines(cursor_.row_, count);
-                    SetCursor(buffer, {cursor_.row_, 0}, false);
-                }
-                else
-                {
-                    buffer.EraseLines(count - 1, cursor_.row_ + 1);
-                    SetCursor(buffer, {count - 1, 0}, false);
-                }
-                break;
-            }
-        }
         case ActionType::Max:
         {
-            switch (motion)
+            Position previous_cursor_{cursor_};
+            ApplyJumpto(buffer, motion, *type);
+            if (Is_Indent)
             {
-            case Motion::Goto_Back:
+                for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
+                    buffer.InsertCharacters(row, 0, '\t', 2);
+                MoveRight(buffer, 8);
+            }
+            else
+            {
+                for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
+                    buffer.EraseIndent(row, 8);
+                MoveLeft(buffer, 8);
+            }
+            break;
+        }
+        case ActionType::Match:
+        {
+            Position previous_cursor_{cursor_};
+            Position match_pos = Parenthesis_Matching(buffer);
+            if (match_pos.row_ >= buffer.GetLineCount())
+            {
+                throw std::runtime_error("Error:Patterns not found");
+                return;
+            }
+            cursor_ = match_pos;
+            if (Is_Indent)
+            {
+                for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
+                    buffer.InsertCharacters(row, 0, '\t', 2);
+                MoveRight(buffer, 8);
+            }
+            else
+            {
+                for (size_t row = std::min(previous_cursor_.row_, cursor_.row_); row <= std::max(previous_cursor_.row_, cursor_.row_); row++)
+                    buffer.EraseIndent(row, 8);
+                MoveLeft(buffer, 8);
+            }
+            break;
+        }
+        }
+    }
 
-                buffer.EraseLines(cursor_.row_, buffer.GetLineCount());
-                SetCursor(buffer, {cursor_.row_, 0}, false);
+    Position Window::Parenthesis_Matching(const Buffer &buffer) const // 从光标所在处开始进行括号匹配,返回匹配的位置，若没有匹配位置，返回最大行,0.
+    {
+        Window temporary_window;
+        temporary_window.SetCursor(buffer, cursor_, true);
+        temporary_window.RenewCount(std::nullopt);
+        std::string_view line = buffer.GetLineAt(cursor_.row_);
+        size_t index = cursor_.column_;
+        Motion motion;
+        int matching_type{0};
+        int matching_sum{0};
+        while (index < line.size() && Assist::Braces(line[index]) == 0)
+            index++;
+        if (index < line.size() && Assist::Braces(line[index]) != 0)
+        {
+            matching_type = std::abs(Assist::Braces(line[index]));
+            matching_sum = Assist::Braces(line[index]) / matching_type;
+        }
+        else
+            return {buffer.GetLineCount(), 0};
+        if (matching_sum < 0)
+            motion = Motion::Left_allow_crossline;
+        else
+            motion = Motion::Right_allow_crossline;
+        temporary_window.SetCursor(buffer, {cursor_.row_, index}, false);
+        while (matching_sum != 0) // 开始匹配
+        {
+            temporary_window.ApplyMotion(buffer, motion);
+            line = buffer.GetLineAt(temporary_window.GetCursor().row_);
+            if (temporary_window.cursor_.column_ < line.size() && matching_type == std::abs(Assist::Braces(line[temporary_window.GetCursor().column_])))
+            {
+                matching_sum += Assist::Braces(line[temporary_window.GetCursor().column_]) / matching_type;
+            }
+            if ((temporary_window.GetCursor().row_ == 0 && temporary_window.GetCursor().column_ == 0) || (temporary_window.GetCursor().row_ + 1 == buffer.GetLineCount() && (line.size() == 0 || temporary_window.GetCursor().column_ + 1 == line.size())))
+            {
                 break;
             }
         }
+        if (matching_sum != 0)
+        {
+            return {buffer.GetLineCount(), 0};
         }
+        return temporary_window.GetCursor();
     }
 
     void Window::EnsureCursorVisible(const Buffer &buffer)
