@@ -35,7 +35,6 @@ public:
     void ApplyDelete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
     void ApplyIndent(Buffer &buffer,Motion motion,std::optional<ActionType> type,bool Is_Indent);
 
-
     void RenewCount(std::optional<size_t> expected_count);//更新window里的剩余count值
     void Renew_Lastparser(char lastparser);//记录上一个按键
     void Renew_Lastparser();//清空按键记录

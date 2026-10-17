@@ -16,7 +16,6 @@ Editor负责协调各个模块,保存当前模式,并根据输入调用Buffer和
 #include "Types.hpp"
 #include "Window.hpp"
 #include "Undo.hpp"
-#include "Mark.hpp"
 
 namespace sjtu
 {
@@ -79,12 +78,12 @@ namespace sjtu
         std::string message_;     // 底部的提示或错误信息
         bool running_{true};      // 设为false后结束主循环
 
-        Position last_cursor_{0,0}; //上一次撤回前的光标位置
-
         std::vector<UnDo_ReDo> undo_list; // 用于撤销
         size_t undo_position_{0};         // 记录现在撤销了几次
 
-        Mark mark_;
+        std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符
+
+        Position last_cursor_;
 
         //std::string LineUndo_;//for U
         //Position LineUndo_cursor_;

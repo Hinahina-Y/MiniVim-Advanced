@@ -1,14 +1,14 @@
 #include <cmath>
 
-#include "Editor.hpp"//这是因为有些和撤回相关的操作需要editor实现，放在这里节约Editor.cpp大小
+#include "Editor.hpp" //这是因为有些和撤回相关的操作需要editor实现，放在这里节约Editor.cpp大小
 
 namespace sjtu
 {
     void UnDo_ReDo::Renew_Time()
     {
-        Timetag_=time(nullptr);
+        Timetag_ = time(nullptr);
     }
-    
+
     void UnDo_ReDo::Renew_Position(Position pos)
     {
         pos_ = pos;
@@ -23,6 +23,7 @@ namespace sjtu
         }
         Renew_Position(window.GetCursor());
         Renew_Time();
+        undo_mark_ = buffer.mark_;
     }
     const size_t UnDo_ReDo::GetUndoLineCount() const
     {
@@ -43,7 +44,7 @@ namespace sjtu
 
     std::string UnDo_ReDo::GetUndoTime(std::time_t Previous_Timetag) const
     {
-        size_t Seconds = 1+(size_t)(std::fabs(std::difftime(Previous_Timetag, Timetag_)));
+        size_t Seconds = 1 + (size_t)(std::fabs(std::difftime(Previous_Timetag, Timetag_)));
         if (Seconds > 600)
         {
             struct std::tm PreviousTime{};
@@ -64,12 +65,11 @@ namespace sjtu
     void UnDo_ReDo::ApplyUndo(Buffer &buffer, Window &window)
     {
         buffer.copyBuffer(Undo_lines_);
+        buffer.mark_ = undo_mark_;
         window.SetCursor(buffer, pos_, false);
         window.EnsureCursorVisible(buffer);
         Renew_Time();
     }
-
-    
 
     void Editor::DealUndoList(Position pos)
     {

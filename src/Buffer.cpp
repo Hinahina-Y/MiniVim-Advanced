@@ -46,10 +46,10 @@ namespace sjtu
     }
 
     const std::string &Buffer::GetLineAt(std::size_t row) const
-    {   
-        if(row>=lines_.size())
+    {
+        if (row >= lines_.size())
         {
-            static const std::string emptyLine="";
+            static const std::string emptyLine = "";
             return emptyLine;
         }
         // 返回第row行的内容
@@ -118,7 +118,7 @@ namespace sjtu
             return;
         }
         lines_[row].insert(lines_[row].begin() + column, sum, value);
-        // 在第row行第col列插入sum个value, 注意越界检查
+        // 在第row行第col列插入sum个value
         return;
     }
 
@@ -152,6 +152,7 @@ namespace sjtu
         {
             lines_.push_back("");
         }
+        mark_.DeleteMark(row_up, row_down); // 处理这些行的mark标记
     }
 
     void Buffer::EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right) // 删除[left,right)的字母.
@@ -205,7 +206,6 @@ namespace sjtu
         }
         if (row_left == row_right)
         {
-
             lines_[row_left].erase(lines_[row_left].begin() + column_left, lines_[row_left].begin() + column_right);
             if (crossline)
                 JoinLine(row_left);
@@ -221,21 +221,21 @@ namespace sjtu
         }
     }
 
-    void Buffer::EraseIndent(std::size_t row,size_t sum)//第row行s删除sum列的缩进，一个缩进是8列
+    void Buffer::EraseIndent(std::size_t row, size_t sum) // 第row行s删除sum列的缩进，一个缩进是8列
     {
         size_t count{0};
-        if(row>=lines_.size())
+        if (row >= lines_.size())
         {
             return;
         }
-        while(count<sum)
+        while (count < sum)
         {
-            if(lines_[row].size()==0||(lines_[row][0]!='\t'&&lines_[row][0]!=' '))
+            if (lines_[row].size() == 0 || (lines_[row][0] != '\t' && lines_[row][0] != ' '))
             {
                 return;
             }
-            count=NextScreenColumn(count,lines_[row][0]);
-            EraseCharacter(row,1);
+            count = NextScreenColumn(count, lines_[row][0]);
+            EraseCharacter(row, 1);
         }
         return;
     }
@@ -248,9 +248,15 @@ namespace sjtu
     void Buffer::SplitLine(std::size_t row, std::size_t column)
     {
         // 在第row行第col列分割,即在此处敲了回车键
+        if (row >= lines_.size())
+        {
+            lines_.push_back("");
+            return;
+        }
         std::string line_new = lines_[row].substr(column);
         lines_[row] = lines_[row].substr(0, column);
         lines_.insert(lines_.begin() + row + 1, line_new);
+        mark_.EditMark(row + 1, 1);
     }
 
     void Buffer::JoinLine(std::size_t row)
@@ -262,6 +268,7 @@ namespace sjtu
         }
         lines_[row] += lines_[row + 1];
         lines_.erase(lines_.begin() + row + 1);
+        mark_.EditMark(row + 1, -1);
     }
 
     void Buffer::Achieve_LineUndo(std::size_t row, std::string line)

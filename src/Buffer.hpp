@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <vector>
 
+#include "Mark.hpp"
+
 
 namespace sjtu
 {
@@ -40,6 +42,7 @@ namespace sjtu
         void Save();
         void SaveAs(const std::filesystem::path &path); // 保存地址
         
+        Mark mark_;
 
     private:
         void WriteTo(const std::filesystem::path &path) const;

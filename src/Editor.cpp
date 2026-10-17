@@ -184,13 +184,9 @@ namespace sjtu
                 case ActionType::Match:
                     Position match_pos = window_.Parenthesis_Matching(buffer_);
                     if (match_pos.row_ < buffer_.GetLineCount())
-                    {
                         window_.SetCursor(buffer_, match_pos, false);
-                    }
                     else
-                    {
                         message_ = "Error:Patterns not found";
-                    }
                     break;
                 }
                 window_.SetCursor(buffer_, window_.GetCursor(), false);
@@ -246,6 +242,9 @@ namespace sjtu
                     Largely_Reset();
                 }
                 return;
+            case ActionKind::Mark:
+                Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
+                return;
             case ActionKind::MergeLine: // 处理J
                 for (index = 1; index <= count; index++)
                 {
@@ -276,12 +275,46 @@ namespace sjtu
                 return;
             case ActionKind::InsertBefore:
                 // 进入InsertMode,Editor自己就有对应方法
+                Insert_Keys_.clear();
+                if (editoraction_.motion_.has_value())
+                {
+                    switch (*editoraction_.motion_)
+                    {
+                    case Motion::Up:
+                        buffer_.SplitLine(now_cursor.row_, 0);
+                        window_.SetCursor(buffer_, {now_cursor.row_, 0}, true);
+                        break;
+                    case Motion::Goto_First_Noblank:
+                        window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                        break;
+                    default:
+                        break;
+                    }
+                }
                 EnterInsert(window_.GetCursor());
                 return;
             case ActionKind::InsertAfter:
                 // 从当前Char之后进入InsertMode
                 // 特判:如果Buffer表示当前Cursor所在的行是空的怎么办?
-                window_.ApplyMotion(buffer_, Motion::Right);
+                Insert_Keys_.clear();
+                if (editoraction_.motion_.has_value())
+                {
+                    switch (*editoraction_.motion_)
+                    {
+                    case Motion::Down:
+                        buffer_.SplitLine(now_cursor.row_ + 1, 0);
+                        window_.SetCursor(buffer_, {now_cursor.row_ + 1, 0}, true);
+                        Insert_Keys_.push_back({KeyCode::Enter, '\r'});
+                        break;
+                    case Motion::Goto_Back:
+                        window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                        break;
+                    case Motion::Right:
+                        window_.ApplyMotion(buffer_, Motion::Right);
+                    default:
+                        break;
+                    }
+                }
                 window_.SetCursor(buffer_, window_.GetCursor(), true);
                 EnterInsert(window_.GetCursor());
                 return;
@@ -318,11 +351,10 @@ namespace sjtu
         switch (editoraction_.kind_)
         {
         case ActionKind::Replace:
+        {
             size_t count{1};
             if (editoraction_.count_.has_value())
-            {
                 count = *editoraction_.count_;
-            }
             Position cursor_pos = window_.GetCursor();
             size_t line_length = buffer_.GetLineAt(cursor_pos.row_).size();
             if (key.code_ == KeyCode::Escape)
@@ -370,11 +402,40 @@ namespace sjtu
                 window_.EnsureCursorVisible(buffer_);
             }
             Need_Arguments_ = false;
-            normal_parser_.Reset_editoraction(editoraction_);
-            window_.Renew_Lastparser();
-            window_.RenewCount(std::nullopt);
+            Largely_Reset();
             DealUndoList(now_cursor);
             return;
+        }
+        case ActionKind::Mark:
+        {
+            Need_Arguments_ = false;
+            if (key.code_ != KeyCode::Character)
+            {
+                message_ = "Error:Wrong mark!";
+                Largely_Reset();
+                return;
+            }
+            if (!editoraction_.type_.has_value())
+            {
+                buffer_.mark_.NewMark(key.value_, window_.GetCursor());
+                Largely_Reset();
+                return;
+            }
+            try
+            {
+                switch (*editoraction_.type_)
+                {
+                case ActionType::To:
+                    window_.SetCursor(buffer_, buffer_.mark_.GetMarkPosition(key.value_), false);
+                    break;
+                }
+            }
+            catch (const std::runtime_error &e)
+            {
+                message_ = e.what();
+            }
+            Largely_Reset();
+        }
         }
     }
 
@@ -396,6 +457,8 @@ namespace sjtu
         case KeyCode::Enter:
             buffer_.SplitLine(cursor_position.row_, cursor_position.column_);
             window_.ApplyMotion(buffer_, Motion::Go_Down_Line);
+            if (editoraction_.count_.has_value())
+                Insert_Keys_.push_back(key);
             // window_.SetCursor(buffer_, window_.GetCursor(), true);
             break;
         case KeyCode::Backspace:
@@ -413,6 +476,13 @@ namespace sjtu
                 window_.ApplyMotion(buffer_, Motion::Left);
             }
             // window_.SetCursor(buffer_, window_.GetCursor(), true);
+            if (editoraction_.count_.has_value())
+            {
+                if (Insert_Keys_.size() > 0 && Insert_Keys_[Insert_Keys_.size() - 1].code_ != KeyCode::Backspace)
+                    Insert_Keys_.pop_back();
+                else
+                    Insert_Keys_.push_back(key);
+            }
             break;
         case KeyCode::Delete:
             if (cursor_position.column_ + 1 <= buffer_.GetLineAt(cursor_position.row_).size())
@@ -423,23 +493,31 @@ namespace sjtu
             {
                 buffer_.JoinLine(cursor_position.row_);
             }
+            if (editoraction_.count_.has_value())
+                Insert_Keys_.push_back(key);
             break;
         case KeyCode::Character:
             buffer_.InsertCharacter(cursor_position.row_, cursor_position.column_, key.value_);
             window_.ApplyMotion(buffer_, Motion::Right);
+            if (editoraction_.count_.has_value())
+                Insert_Keys_.push_back(key);
             // window_.SetCursor(buffer_, window_.GetCursor(), true);
             break;
         case KeyCode::ArrowLeft:
             window_.ApplyMotion(buffer_, Motion::Left);
+            normal_parser_.Reset_editoraction(editoraction_); // 移动了，就不管count了
             break;
         case KeyCode::ArrowRight:
             window_.ApplyMotion(buffer_, Motion::Right);
+            normal_parser_.Reset_editoraction(editoraction_);
             break;
         case KeyCode::ArrowUp:
             window_.ApplyMotion(buffer_, Motion::Up);
+            normal_parser_.Reset_editoraction(editoraction_);
             break;
         case KeyCode::ArrowDown:
             window_.ApplyMotion(buffer_, Motion::Down);
+            normal_parser_.Reset_editoraction(editoraction_);
             break;
         }
         return;
@@ -450,7 +528,8 @@ namespace sjtu
         // 切换到Insert模式,设置插入位置并清除旧提示;允许光标停在行尾字符之后(清除旧提示还未完成)
         message_ = "";
         command_ = "";
-        Largely_Reset();
+        window_.RenewCount(std::nullopt);
+        window_.Renew_Lastparser();
         window_.SetCursor(buffer_, window_.GetCursor(), true);
         mode_ = Mode::Insert;
         last_cursor_ = window_.GetCursor();
@@ -460,10 +539,29 @@ namespace sjtu
     void Editor::LeaveInsert()
     {
         // 从插入位置回到Normal模式的字符位置:不在行首时先左移一列,再限制光标范围
+        if (editoraction_.count_.has_value() && *editoraction_.count_ > 1 && Insert_Keys_.size() > 0)
+        {
+            if (editoraction_.kind_ == ActionKind::InsertBefore && editoraction_.motion_ == Motion::Up)
+            {
+                Insert_Keys_.push_back({KeyCode::Enter, '\r'});
+            }
+            size_t count = 1, expect_count = *editoraction_.count_;
+            normal_parser_.Reset_editoraction(editoraction_);
+            while (count < expect_count)
+            {
+                for (size_t index = 0; index < Insert_Keys_.size(); index++)
+                {
+                    HandleInsert(Insert_Keys_[index]);
+                }
+                count++;
+            }
+        }
+        Insert_Keys_.clear();
         window_.ApplyMotion(buffer_, Motion::Left);
         window_.SetCursor(buffer_, window_.GetCursor(), false);
         DealUndoList(last_cursor_);
         mode_ = Mode::Normal;
+        Largely_Reset();
         return;
     }
 

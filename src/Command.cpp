@@ -31,9 +31,17 @@ namespace sjtu
             case 'j':
                 return GenerateMotion(Motion::Down);
             case 'i':
-                return {ActionKind::InsertBefore, std::nullopt, std::nullopt, std::nullopt, Mode::Insert};
+                return {ActionKind::InsertBefore, Motion::Left, std::nullopt, std::nullopt, Mode::Insert};
+            case 'I':
+                return {ActionKind::InsertBefore, Motion::Goto_First_Noblank, std::nullopt, std::nullopt, Mode::Insert};
             case 'a':
-                return {ActionKind::InsertAfter, std::nullopt, std::nullopt, std::nullopt, Mode::Insert};
+                return {ActionKind::InsertAfter, Motion::Right, std::nullopt, std::nullopt, Mode::Insert};
+            case 'A':
+                return {ActionKind::InsertAfter, Motion::Goto_Back, std::nullopt, std::nullopt, Mode::Insert};
+            case 'o':
+                return {ActionKind::InsertAfter, Motion::Down, std::nullopt, std::nullopt, Mode::Insert};
+            case 'O':
+                return {ActionKind::InsertBefore, Motion::Up, std::nullopt, std::nullopt, Mode::Insert};
             case ':':
                 return GenerateCommand(ActionKind::EnterCommandLine);
             case '0':
@@ -88,6 +96,10 @@ namespace sjtu
                 return {ActionKind::Indent, std::nullopt, std::nullopt, std::nullopt};
             case '<':
                 return {ActionKind::Unindent, std::nullopt, std::nullopt, std::nullopt};
+            case 'm':
+                return {ActionKind::Mark, std::nullopt, std::nullopt, std::nullopt};
+            case '`':
+                return {ActionKind::Mark, std::nullopt, std::nullopt, ActionType::To};
             default:
                 break;
             }
@@ -180,6 +192,8 @@ namespace sjtu
             case ActionKind::Delete:
             case ActionKind::Indent:
             case ActionKind::Unindent:
+            case ActionKind::InsertBefore:
+            case ActionKind::InsertAfter:
                 if (editoraction_2.kind_ == ActionKind::Move && editoraction_2.type_.has_value() && *editoraction_2.type_ == ActionType::Match) // 特判%
                 {
                     editoraction_1.kind_ = ActionKind::Jump_To;
