@@ -100,6 +100,20 @@ namespace sjtu
                 return {ActionKind::Mark, std::nullopt, std::nullopt, std::nullopt};
             case '`':
                 return {ActionKind::Mark, std::nullopt, std::nullopt, ActionType::To};
+            case '~':
+                return {ActionKind::Shift,Motion::Right,std::nullopt,ActionType::Ordinary};
+            case 'y':
+                return {ActionKind::Copy,std::nullopt,std::nullopt,ActionType::Ordinary};
+            case 'Y':
+                return {ActionKind::Copy,Motion::Goto_Back,std::nullopt,ActionType::Ordinary};
+            case '/':
+                return {ActionKind::Search,Motion::Right_allow_crossline,std::nullopt,ActionType::Ordinary,Mode::CommandLine};
+            case '?':
+                return {ActionKind::Search,Motion::Left_allow_crossline,std::nullopt,ActionType::Ordinary,Mode::CommandLine};
+            case 'n':
+                return {ActionKind::Search,Motion::Up,std::nullopt,ActionType::Ordinary};
+            case 'N':
+                return {ActionKind::Search,Motion::Down,std::nullopt,ActionType::Ordinary};
             default:
                 break;
             }
@@ -194,6 +208,7 @@ namespace sjtu
             case ActionKind::Unindent:
             case ActionKind::InsertBefore:
             case ActionKind::InsertAfter:
+            case ActionKind::Shift:
                 if (editoraction_2.kind_ == ActionKind::Move && editoraction_2.type_.has_value() && *editoraction_2.type_ == ActionType::Match) // 特判%
                 {
                     editoraction_1.kind_ = ActionKind::Jump_To;

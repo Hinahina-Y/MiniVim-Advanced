@@ -38,6 +38,16 @@ namespace sjtu
     {
         lines_ = lines;
     }
+    void Buffer::copyLine(const std::string &line,size_t row)
+    {
+        if(row>lines_.size())
+            return;
+        if(row==lines_.size())
+            lines_.push_back(line);
+        else
+            lines_[row]=line;
+        return;
+    }
 
     std::size_t Buffer::GetLineCount() const
     {

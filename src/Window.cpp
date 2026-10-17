@@ -45,6 +45,14 @@ namespace sjtu
                 return 0;
             }
         }
+        char ShiftLetterCase(char c)
+        {
+            if (c >= 'a' && c <= 'z')
+                return c - 'a' + 'A';
+            if (c >= 'A' && c <= 'Z')
+                return c - 'A' + 'a';
+            return c;
+        }
     }
 
     void Window::Resize(ScreenSize terminal_size)
@@ -270,6 +278,22 @@ namespace sjtu
             }
             break;
         }
+    }
+
+    void Window::ApplyShift(Buffer &buffer, Motion motion)
+    {
+        size_t count{1};
+        if (remaining_count_.has_value())
+        {
+            count = *remaining_count_;
+        }
+        while (cursor_.column_ < buffer.GetLineAt(cursor_.row_).size() && count > 0)
+        {
+            buffer.ReplaceCharacter(cursor_.row_, cursor_.column_, Assist::ShiftLetterCase(buffer.GetLineAt(cursor_.row_)[cursor_.column_]));
+            count--;
+            cursor_.column_++;
+        }
+        SetCursor(buffer, cursor_, false);
     }
 
     void Window::DeleteCharacters(Buffer &buffer, Motion motion)
@@ -629,6 +653,65 @@ namespace sjtu
             return {buffer.GetLineCount(), 0};
         }
         return temporary_window.GetCursor();
+    }
+
+    Position Window::String_searching(const Buffer &buffer, Motion motion, std::string search_string)
+    {
+        Window temporary_window;
+        temporary_window.SetCursor(buffer, cursor_, true);
+        temporary_window.RenewCount(std::nullopt);
+        std::string_view line;
+        if (motion == Motion::Left_allow_crossline)
+        {
+            line = buffer.GetLineAt(temporary_window.cursor_.row_).substr(0, temporary_window.cursor_.column_);
+            size_t findindex = line.find(search_string);
+            if (findindex != line.npos)
+                return {temporary_window.cursor_.row_, findindex};
+            while (temporary_window.cursor_.row_ > 0)
+            {
+                temporary_window.cursor_.row_--;
+                line = buffer.GetLineAt(temporary_window.cursor_.row_);
+                findindex = line.find(search_string);
+                if (findindex != line.npos)
+                    return {temporary_window.cursor_.row_, findindex};
+            }
+        }
+        else if (motion == Motion::Right_allow_crossline)
+        {
+            line = buffer.GetLineAt(temporary_window.cursor_.row_).substr(temporary_window.cursor_.column_+1);
+            size_t findindex = line.find(search_string);
+            if (findindex != line.npos)
+                return {temporary_window.cursor_.row_, findindex+temporary_window.cursor_.column_+1};
+            while (temporary_window.cursor_.row_ + 1 < buffer.GetLineCount())
+            {
+                temporary_window.cursor_.row_++;
+                line = buffer.GetLineAt(temporary_window.cursor_.row_);
+                findindex = line.find(search_string);
+                if (findindex != line.npos)
+                    return {temporary_window.cursor_.row_, findindex};
+            }
+        }
+        return {buffer.GetLineCount(), 0};
+    }
+
+    void Window::ApplySearch(Buffer &buffer, Motion motion, std::string search_string)
+    {
+        size_t count{1};
+        bool has_find=false;
+        if (remaining_count_.has_value())
+            count = *remaining_count_;
+        while (count--)
+        {
+            Position find_pos = String_searching(buffer, motion, search_string);
+            if (find_pos.row_ != buffer.GetLineCount())
+                SetCursor(buffer, find_pos, false);
+            else if(!has_find)
+                throw std::runtime_error("Error:Patterns could not be found!");
+            else
+                return;
+            has_find=true;
+        }
+        return;
     }
 
     void Window::EnsureCursorVisible(const Buffer &buffer)

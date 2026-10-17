@@ -27,6 +27,7 @@ namespace sjtu
         bool IsModified() const;
         
         void copyBuffer(const std::vector<std::string>& lines);
+        void copyLine(const std::string& line,size_t row);
 
         void InsertCharacter(std::size_t row, std::size_t column, char value);
         void InsertCharacters(std::size_t row, std::size_t column, char value,size_t sum);//插入sum个value
