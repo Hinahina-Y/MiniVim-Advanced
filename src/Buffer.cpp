@@ -38,14 +38,36 @@ namespace sjtu
     {
         lines_ = lines;
     }
-    void Buffer::copyLine(const std::string &line,size_t row)
+
+    void Buffer::ReadFile(const std::filesystem::path &path)
     {
-        if(row>lines_.size())
+        lines_.clear();
+        if (path.empty())
+        {
+            lines_.push_back("");
             return;
-        if(row==lines_.size())
+        }
+        std::string line;
+        std::ifstream in(path); // 读取文件，由ai建议我这么写
+        while (std::getline(in, line))
+        {
+            if (!line.empty() && line.back() == '\r') // 防止Windows文件带换行\r\n
+            {
+                line.pop_back();
+            }
+            lines_.push_back(line);
+        }
+        path_ = path;
+    }
+
+    void Buffer::copyLine(const std::string &line, size_t row)
+    {
+        if (row > lines_.size())
+            return;
+        if (row == lines_.size())
             lines_.push_back(line);
         else
-            lines_[row]=line;
+            lines_[row] = line;
         return;
     }
 
@@ -186,20 +208,15 @@ namespace sjtu
     void Buffer::EraseCharacters(std::size_t row_left, std::size_t column_left, std::size_t row_right, std::size_t column_right)
     {
         bool crossline = false;
-        if (row_left < 0)
+        if (row_left > row_right || (row_left == row_right && column_left >= column_right))
         {
-            row_left = 0;
-            column_left = 0;
+            std::swap(row_left, row_right);
+            std::swap(column_left, column_right);
         }
         if (row_right >= lines_.size())
         {
             row_right = lines_.size() - 1;
             column_right = lines_[row_right].size() + 1;
-        }
-        if (row_left > row_right || (row_left == row_right && column_right <= column_left))
-        {
-            std::swap(row_left, row_right);
-            std::swap(column_left, column_right);
         }
         if (column_left >= lines_[row_left].size())
         {
@@ -223,11 +240,15 @@ namespace sjtu
         else
         {
             lines_[row_left].erase(lines_[row_left].begin() + column_left, lines_[row_left].end());
+            lines_[row_right].erase(lines_[row_right].begin(), lines_[row_right].begin() + column_right);
             EraseLines(row_left + 1, row_right + 1);
-            lines_[row_right].erase(lines_[row_left].begin(), lines_[row_left].begin() + column_right);
             JoinLine(row_left);
             if (crossline)
                 JoinLine(row_left);
+        }
+        if (lines_.empty())
+        {
+            lines_.push_back("");
         }
     }
 

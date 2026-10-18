@@ -42,6 +42,7 @@ namespace sjtu
         void Achieve_LineUndo(std::size_t row,std::string line);
         void Save();
         void SaveAs(const std::filesystem::path &path); // 保存地址
+        void ReadFile(const std::filesystem::path &path={});
         
         Mark mark_;
 

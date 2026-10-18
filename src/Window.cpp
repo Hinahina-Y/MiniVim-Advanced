@@ -44,6 +44,7 @@ namespace sjtu
             default:
                 return 0;
             }
+            return 0;
         }
         char ShiftLetterCase(char c)
         {
@@ -125,7 +126,7 @@ namespace sjtu
             {
                 if (cursor_.column_ == 0)
                 {
-                    if (cursor_.row_ != 0)
+                    if (cursor_.row_ > 0)
                     {
                         MoveUp(buffer, 1);
                         MoveRight(buffer, buffer.GetLineAt(cursor_.row_).size());
@@ -144,9 +145,9 @@ namespace sjtu
         case Motion::Right_allow_crossline:
             while (count--)
             {
-                if (cursor_.column_ + 1 == buffer.GetLineAt(cursor_.row_).size())
+                if (cursor_.column_ + 1 >= buffer.GetLineAt(cursor_.row_).size())
                 {
-                    if (cursor_.row_ + 1 != buffer.GetLineCount())
+                    if (cursor_.row_ + 1 < buffer.GetLineCount())
                     {
                         MoveDown(buffer, 1);
                         MoveLeft(buffer, cursor_.column_);
@@ -295,7 +296,6 @@ namespace sjtu
         }
         SetCursor(buffer, cursor_, false);
     }
-
 
     void Window::DeleteCharacters(Buffer &buffer, Motion motion)
     {
@@ -612,7 +612,7 @@ namespace sjtu
         }
     }
 
-    Position Window::Parenthesis_Matching(const Buffer &buffer) const // 从光标所在处开始进行括号匹配,返回匹配的位置，若没有匹配位置，返回最大行,0.
+    Position Window::Parenthesis_Matching(const Buffer &buffer) const // 从光标所在处开始进行括号匹配,返回匹配的位置，不支持换行匹配,若没有匹配位置，返回最大行,0.
     {
         Window temporary_window;
         temporary_window.SetCursor(buffer, cursor_, true);
@@ -644,7 +644,7 @@ namespace sjtu
             {
                 matching_sum += Assist::Braces(line[temporary_window.GetCursor().column_]) / matching_type;
             }
-            if ((temporary_window.GetCursor().row_ == 0 && temporary_window.GetCursor().column_ == 0) || (temporary_window.GetCursor().row_ + 1 == buffer.GetLineCount() && (line.size() == 0 || temporary_window.GetCursor().column_ + 1 == line.size())))
+            if (!((Position){0, 0} < temporary_window.GetCursor()) || (temporary_window.GetCursor().row_ + 1 >= buffer.GetLineCount() && temporary_window.GetCursor().column_ + 1 >= line.size()))
             {
                 break;
             }
@@ -666,7 +666,7 @@ namespace sjtu
         {
             line = buffer.GetLineAt(temporary_window.cursor_.row_);
             size_t findindex = line.find(search_string);
-            if (findindex != line.npos && findindex < temporary_window.cursor_.column_)
+            if (findindex != line.npos || findindex < temporary_window.cursor_.column_)
                 return {temporary_window.cursor_.row_, findindex};
             while (temporary_window.cursor_.row_ > 0)
             {
@@ -738,7 +738,6 @@ namespace sjtu
         }
     }
 
-    
     void Window::AdjustViewport(const Buffer &buffer, Motion motion, ActionType type)
     {
         size_t count{1};
@@ -853,7 +852,7 @@ namespace sjtu
                 if (viewport_.rows_ > cursor_.row_)
                     viewport_.top_ = 0;
                 else
-                    viewport_.top_ = cursor_.row_  +1 - viewport_.rows_;
+                    viewport_.top_ = cursor_.row_ + 1 - viewport_.rows_;
             }
             break;
         }

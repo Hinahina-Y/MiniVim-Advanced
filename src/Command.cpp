@@ -230,7 +230,7 @@ namespace sjtu
                 {
                     editoraction_1.kind_ = ActionKind::Jump_To;
                     editoraction_1.motion_ = Motion::Down;
-                    editoraction_1.type_ = editoraction_2.type_;
+                    editoraction_1.type_ = ActionType::Ordinary;
                     editoraction_1.into_mode_ = editoraction_2.into_mode_;
                     return true;
                 }

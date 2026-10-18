@@ -739,7 +739,11 @@ namespace sjtu
                 message_ = "WARNING:No save since last change.";
                 return;
             }
-            buffer_ = (Buffer)((std::filesystem::path)argument);
+            buffer_.ReadFile((std::filesystem::path)argument);
+            buffer_.mark_.DeleteMark(0,buffer_.GetLineCount());
+            undo_list.clear();
+            undo_position_=0;
+            DealUndoList();
         }
         else
         {

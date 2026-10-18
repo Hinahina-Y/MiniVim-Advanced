@@ -213,12 +213,9 @@ namespace sjtu
                 Return_string += line[index];
             else
             {
-                size_t space_sum{NextScreenColumn(index, '\t')};
-                while (space_sum > index)
-                {
+                size_t space_sum{NextScreenColumn(Return_string.size(), '\t')};
+                while (space_sum > Return_string.size())
                     Return_string += " ";
-                    space_sum--;
-                }
             }
         }
         return Return_string;
