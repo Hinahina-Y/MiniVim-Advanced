@@ -16,6 +16,7 @@ Editor负责协调各个模块,保存当前模式,并根据输入调用Buffer和
 #include "Types.hpp"
 #include "Window.hpp"
 #include "Undo.hpp"
+#include "Register.hpp"
 
 namespace sjtu
 {
@@ -85,8 +86,7 @@ namespace sjtu
 
         std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符
 
-        std::map<char,std::vector<KeyEvent>> register_;//寄存器
-        char Using_register_name='\"';
+        std::map<char,Register> register_;
 
         Position last_cursor_;
 

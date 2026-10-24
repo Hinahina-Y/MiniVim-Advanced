@@ -93,14 +93,14 @@ namespace sjtu
         {
         case Mode::Normal:
             message_ = "";
+            if (key.code_ == KeyCode::Character)
+            {
+                window_.Renew_Lastparser(key.value_);
+            }
             if (Need_Arguments_) // 如果现在输入的字符是参数而不是操作
             {
                 Execute_withArgument(key);
                 break;
-            }
-            if (key.code_ == KeyCode::Character)
-            {
-                window_.Renew_Lastparser(key.value_);
             }
             Execute(normal_parser_.Feed(key));
             break;
@@ -127,7 +127,7 @@ namespace sjtu
             return;
         }
         // 先处理Del删除指令(其他指令都是处理，这个是撤回)
-        if (normal_parser_.EditorAction_Equal_Key(action, {KeyCode::Delete, ' '}) && window_.GetLastparser().has_value())
+        if (action==(KeyEvent){KeyCode::Delete, ' '} && window_.GetLastparser().has_value())
         {
             std::string s_line = *window_.GetLastparser();
             window_.RenewCount(editoraction_.count_);
@@ -162,6 +162,9 @@ namespace sjtu
             switch (editoraction_.kind_)
             {
             case ActionKind::None:
+                return;
+            case ActionKind::Waiting_Argument:
+                Need_Arguments_ = true; // 需要参数
                 return;
             case ActionKind::Move:
                 // 交给Window吧
@@ -237,6 +240,32 @@ namespace sjtu
                     window_.SetCursor(buffer_, window_.GetCursor(), false);
                     window_.EnsureCursorVisible(buffer_);
                     DealUndoList(now_cursor);
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Copy:
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    Register temporary_register;
+                    if (temporary_register.Execute_copy(buffer_, window_, editoraction_))
+                        register_[editoraction_.argument_name_] = std::move(temporary_register);
+                    window_.EnsureCursorVisible(buffer_);
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Paste:
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    if (register_.find(editoraction_.argument_name_) != register_.end())
+                    {
+                        register_[editoraction_.argument_name_].Execute_paste(buffer_, window_, editoraction_);
+                        window_.EnsureCursorVisible(buffer_);
+                        DealUndoList(now_cursor);
+                    }
+                    else
+                    {
+                        message_ = "Error:Nothing in register " + std::string(1,editoraction_.argument_name_);
+                    }
                     Largely_Reset();
                 }
                 return;
@@ -471,6 +500,16 @@ namespace sjtu
             }
             Largely_Reset();
         }
+        case ActionKind::Waiting_Argument:
+            if (key.code_ != KeyCode::Character)
+            {
+                Largely_Reset();
+                return;
+            }
+            editoraction_.argument_name_ = key.value_;
+            editoraction_.kind_=ActionKind::None;
+            Need_Arguments_ = false;
+            return;
         }
     }
 
@@ -740,9 +779,9 @@ namespace sjtu
                 return;
             }
             buffer_.ReadFile((std::filesystem::path)argument);
-            buffer_.mark_.DeleteMark(0,buffer_.GetLineCount());
+            buffer_.mark_.DeleteMark(0, buffer_.GetLineCount());
             undo_list.clear();
-            undo_position_=0;
+            undo_position_ = 0;
             DealUndoList();
         }
         else

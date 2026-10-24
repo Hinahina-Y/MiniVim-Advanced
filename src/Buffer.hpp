@@ -6,7 +6,6 @@
 
 #include "Mark.hpp"
 
-
 namespace sjtu
 {
     class Buffer
@@ -25,25 +24,27 @@ namespace sjtu
         const std::string &GetLineAt(std::size_t row) const;
         std::string GetDisplayName() const;
         bool IsModified() const;
-        
-        void copyBuffer(const std::vector<std::string>& lines);
-        void copyLine(const std::string& line,size_t row);
+
+        void copyBuffer(const std::vector<std::string> &lines);
+        void copyLine(const std::string &line, size_t row);
 
         void InsertCharacter(std::size_t row, std::size_t column, char value);
-        void InsertCharacters(std::size_t row, std::size_t column, char value,size_t sum);//插入sum个value
+        void InsertCharacters(std::size_t row, std::size_t column, char value, size_t sum); // 插入sum个value
+        void InsertString(std::size_t row, std::size_t column, std::string_view s);         // 插入s
+        void InsertLines(std::size_t row, const std::vector<std::string> &insert_lines);    // 插入一段
         void EraseCharacter(std::size_t row, std::size_t column);
-        void EraseLines(std::size_t row_up,std::size_t row_down);//删除行[row_up,row_down)
-        void EraseCharacters(std::size_t row,std::size_t column_left,std::size_t column_right);//删除[left,right)的字母.
-        void EraseCharacters(std::size_t row_left,std::size_t column_left,std::size_t row_right,std::size_t column_right);//删除[left,right)的字母.
-        void EraseIndent(std::size_t row,size_t sum);
-        void ReplaceCharacter(std::size_t row,std::size_t column,char value);//替换字符
+        void EraseLines(std::size_t row_up, std::size_t row_down);                                                            // 删除行[row_up,row_down)
+        void EraseCharacters(std::size_t row, std::size_t column_left, std::size_t column_right);                             // 删除[left,right)的字母.
+        void EraseCharacters(std::size_t row_left, std::size_t column_left, std::size_t row_right, std::size_t column_right); // 删除[left,right)的字母.
+        void EraseIndent(std::size_t row, size_t sum);
+        void ReplaceCharacter(std::size_t row, std::size_t column, char value); // 替换字符
         void SplitLine(std::size_t row, std::size_t column);
         void JoinLine(std::size_t row);
-        void Achieve_LineUndo(std::size_t row,std::string line);
+        void Achieve_LineUndo(std::size_t row, std::string line);
         void Save();
         void SaveAs(const std::filesystem::path &path); // 保存地址
-        void ReadFile(const std::filesystem::path &path={});
-        
+        void ReadFile(const std::filesystem::path &path = {});
+
         Mark mark_;
 
     private:

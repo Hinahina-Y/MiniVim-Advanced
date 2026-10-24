@@ -168,7 +168,7 @@ namespace sjtu
         EnsureCursorVisible(buffer);
     }
 
-    void Window::ApplyMoveword(const Buffer &buffer, Motion motion, bool rule_type)
+    void Window::ApplyMoveword(const Buffer &buffer, Motion motion, bool rule_type)// 0word 1WORD
     {
         size_t count{1};
         std::string line;

@@ -154,6 +154,24 @@ namespace sjtu
         return;
     }
 
+    void Buffer::InsertString(std::size_t row, std::size_t column, std::string_view s)
+    {
+        if(row>=lines_.size()||column>lines_[row].size())
+        {
+            return;
+        }
+        lines_[row].insert(column,s);
+    }
+
+    void Buffer::InsertLines(std::size_t row, const std::vector<std::string> &insert_lines)
+    {
+        if(row>lines_.size())
+        {
+            return;
+        }
+        lines_.insert(lines_.begin()+row,insert_lines.begin(),insert_lines.end());
+    }
+
     void Buffer::EraseCharacter(std::size_t row, std::size_t column) // 在这个位置按下删除
     {
         if (row >= lines_.size() || column > lines_[row].size())

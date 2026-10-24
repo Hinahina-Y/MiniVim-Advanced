@@ -72,6 +72,7 @@ namespace sjtu
         Right_allow_crossline,
         Go_Delete,
         Go_Indent,
+        Go_Copy,
     };
 
     // 用于分门别类，比如是按字符移动还是按格子移动

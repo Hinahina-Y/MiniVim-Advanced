@@ -26,40 +26,42 @@ namespace sjtu
         EnterCommandLine,
         Undo,
         Redo,
-        Replace,//替代
-        Backspace,//回退
-        Delete,//删除
-        Jump_To,//跳转至
-        MergeLine,//合并两行 only for J
-        Move_word,//按词移动
-        Move_WORD,//按WORD移动
-        Indent,//缩进
-        Unindent,//减少缩进
+        Replace,   // 替代
+        Backspace, // 回退
+        Delete,    // 删除
+        Jump_To,   // 跳转至
+        MergeLine, // 合并两行 only for J
+        Move_word, // 按词移动
+        Move_WORD, // 按WORD移动
+        Indent,    // 缩进
+        Unindent,  // 减少缩进
         Mark,
-        Search,//搜索
-        Shift,//切换大小写
+        Search, // 搜索
+        Shift,  // 切换大小写
         Copy,
         Paste,
-        Adjust,//调整viewport
+        Adjust,           // 调整viewport
+        Waiting_Argument, // 等待参数，并不是实际行动，而是一个用于处理指令的kind
         Undefined,
         // 在Advanced部分中你很可能需要添加别的ActionKind
     };
-
-    
 
     // EditorAction是在NormalMode下我们的Editor真正收到的指令,在Editor中会根据传入的Action的不同让各模块做出对应的处理
     struct EditorAction
     {
         ActionKind kind_{ActionKind::None};
         std::optional<Motion> motion_{};
-        std::optional<size_t> count_{}; //数量
-        std::optional<ActionType> type_{};//实现方式
-        Mode into_mode_{Mode::Normal};//改变模式
+        std::optional<size_t> count_{};    // 数量
+        std::optional<ActionType> type_{}; // 实现方式
+        Mode into_mode_{Mode::Normal};     // 改变模式
+        char argument_name_{'"'};
         // 当kind_ = Move时,motion_才有意义,在Basic中表示移动方向(Motion的定义你可以右键跳转查看)
         // EditorAction和ActionKind分层设计是为了可扩展性,Basic部分的命令都是单个按键,但在Advanced部分中你会遇到多按键命令的情况,
         // 这时候就会遇到按键的pending,比如dw,你可以先构造一个EditorAction存储kind_=Delete,等用户输入motion后令motion=w.
         // 在Advanced部分中你很可能需要添加新的字段,比如std::optional<Count> count_{};
     };
+
+    
 
     class NormalModeParser
     {
@@ -71,17 +73,28 @@ namespace sjtu
         EditorAction Feed(KeyEvent key);
         void Merge_editoraction(EditorAction &editoraction_1, const EditorAction &editoraction_2); // 将旧的指令与新的指令合并
         void Reset_editoraction(EditorAction &editoraction_1);
-        bool EditorAction_Equal_Key(const EditorAction& editoraction, KeyEvent key);
 
     private:
         // 两个辅助函数,从motion/actionkind直接生成对应editoraction,只对某些简单的情形生效.比如h,我们可以根据motion直接得到editoraction为{ActionKind::Move, Motion::h};
         // 这两个接口相当局限,在Advanced中你完全可以不管这两个接口,自己创建更方便的函数来辅助Feed函数
-        bool Merge_editoraction_number(EditorAction &editoraction_1, const EditorAction &editoraction_2);//处理指令数字部分的合并
-        bool Merge_editoraction_delete(EditorAction &editoraction_1, const EditorAction &editoraction_2);//处理指令delete部分的合并
-        bool Merge_editoraction_indent(EditorAction &editoraction_1, const EditorAction &editoraction_2);//处理指令缩进部分的合并
+        bool Merge_editoraction_number(EditorAction &editoraction_1, const EditorAction &editoraction_2); // 处理指令数字部分的合并
+        bool Merge_editoraction_delete(EditorAction &editoraction_1, const EditorAction &editoraction_2); // 处理指令delete部分的合并
+        bool Merge_editoraction_indent(EditorAction &editoraction_1, const EditorAction &editoraction_2); // 处理指令缩进部分的合并
+        bool Merge_editoraction_copy(EditorAction &editoraction_1, const EditorAction &editoraction_2);   // 处理指令Copy部分的合并
         EditorAction GenerateMotion(Motion motion);
         EditorAction GenerateCommand(ActionKind kind);
     };
+    
+    inline bool operator==(const EditorAction &a, const EditorAction &b)
+    {
+        return a.kind_ == b.kind_ && a.motion_ == b.motion_ && a.count_ == b.count_ && a.type_ == b.type_ && a.into_mode_ == b.into_mode_ && a.argument_name_ == b.argument_name_;
+    }
+
+    inline bool operator==(const EditorAction &a, const KeyEvent &b)
+    {
+        NormalModeParser _Temporary_parser;
+        return a==_Temporary_parser.Feed(b);
+    }
 
 } // namespace sjtu
 
