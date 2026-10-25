@@ -79,7 +79,7 @@ namespace sjtu
                 else
                 {
                     if (anchor_pos.row_ >= viewport.top_)
-                        for (size_t column = std::max(anchor_pos.column_, viewport.left_); column < std::min(buffer.GetLineAt(anchor_pos.row_).size(), viewport.left_ + viewport.columns_); column++)
+                        for (size_t column = std::max(anchor_pos.column_, viewport.left_); column < std::min(buffer.GetLineAt(anchor_pos.row_).size()+1, viewport.left_ + viewport.columns_); column++)
                             Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
                     for (size_t column = std::max((size_t)0, viewport.left_); column < std::min(cursor_pos.column_, viewport.left_ + viewport.columns_); column++)
                         Highlight.push_back({"\x1b[30;47m", {cursor_pos.row_, column}});
@@ -92,7 +92,7 @@ namespace sjtu
                         Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
                 else
                 {
-                    for (size_t column = std::max(cursor_pos.column_ + 1, viewport.left_); column < std::min(buffer.GetLineAt(cursor_pos.row_).size(), viewport.left_ + viewport.columns_); column++)
+                    for (size_t column = std::max(cursor_pos.column_ + 1, viewport.left_); column < std::min(buffer.GetLineAt(cursor_pos.row_).size()+1, viewport.left_ + viewport.columns_); column++)
                         Highlight.push_back({"\x1b[30;47m", {cursor_pos.row_, column}});
                     if (anchor_pos.row_ < viewport.top_ + viewport.rows_)
                         for (size_t column = std::max((size_t)0, viewport.left_); column < std::min(anchor_pos.column_ + 1, viewport.left_ + viewport.columns_); column++)
@@ -114,7 +114,7 @@ namespace sjtu
             else
             {
                 // 截取字符
-                line = ExpandForDisplay(buffer.GetLineAt(screen_row + viewport.top_));
+                line = ExpandForDisplay(buffer.GetLineAt(screen_row + viewport.top_)+' ');//空格用来占据换行符在的位置
                 size_t l = viewport.left_;
                 size_t r = viewport.left_ + viewport.columns_ + (size_t)1;
                 if (viewport.left_ >= line.size())
