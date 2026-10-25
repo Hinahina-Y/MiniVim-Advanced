@@ -41,6 +41,7 @@ namespace sjtu
         void SplitLine(std::size_t row, std::size_t column);
         void JoinLine(std::size_t row);
         void Achieve_LineUndo(std::size_t row, std::string line);
+        bool Same_path(const std::filesystem::path &path) const;//检测保存地址是否相同
         void Save();
         void SaveAs(const std::filesystem::path &path); // 保存地址
         void ReadFile(const std::filesystem::path &path = {});

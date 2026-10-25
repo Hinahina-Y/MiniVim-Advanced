@@ -110,6 +110,12 @@ namespace sjtu
                 return {ActionKind::Paste, Motion::Right, std::nullopt, ActionType::Ordinary};
             case 'P':
                 return {ActionKind::Paste, Motion::Left, std::nullopt, ActionType::Ordinary};
+            case 'q':
+                return {ActionKind::Recording, std::nullopt, std::nullopt, std::nullopt};
+            case '@':
+                return {ActionKind::Play, std::nullopt, std::nullopt, std::nullopt};
+            case 'Q':
+                return {ActionKind::Play, std::nullopt, std::nullopt, std::nullopt, Mode::Normal, '@'};
             case '/':
                 return {ActionKind::Search, Motion::Right_allow_crossline, std::nullopt, ActionType::Ordinary, Mode::CommandLine};
             case '?':
@@ -135,7 +141,7 @@ namespace sjtu
             case 't': // 纯纯我们自己添加的，为了zt
                 return {ActionKind::None, std::nullopt, std::nullopt, ActionType::Max};
             case '"':
-                return {ActionKind::Waiting_Argument, std::nullopt, std::nullopt, std::nullopt};
+                return {ActionKind::Waiting_Argument, std::nullopt, std::nullopt, std::nullopt,Mode::Normal,'"'};
             default:
                 break;
             }
@@ -203,6 +209,7 @@ namespace sjtu
             case ActionKind::Adjust:
             case ActionKind::Copy:
             case ActionKind::Paste:
+            case ActionKind::Play:
                 if (editoraction_2.kind_ == ActionKind::Move && editoraction_2.type_.has_value() && *editoraction_2.type_ == ActionType::Match) // 特判%
                 {
                     editoraction_1.kind_ = ActionKind::Jump_To;
@@ -517,10 +524,9 @@ namespace sjtu
             editoraction_1.kind_ = ActionKind::Undefined;
             return;
         }
-         char temp_c = editoraction_1.argument_name_;
-            editoraction_1 = editoraction_2;
-            editoraction_1.argument_name_ = temp_c; // 保持参数名不变
+        char temp_c = editoraction_1.argument_name_;
         editoraction_1 = editoraction_2;
+        editoraction_1.argument_name_ = temp_c; // 保持参数名不变
     }
 
     void NormalModeParser::Reset_editoraction(EditorAction &editoraction_1)

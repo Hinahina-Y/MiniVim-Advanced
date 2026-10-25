@@ -19,6 +19,7 @@ struct RenderState {
     Mode mode_{Mode::Normal};
     std::string command_;
     std::string message_;
+    std::string Recording_;
     size_t command_cursor{0};
     std::string commandline_mode_{":"};
 };

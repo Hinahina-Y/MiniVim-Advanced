@@ -40,6 +40,7 @@ namespace sjtu
 
         // 总执行逻辑,根据Key和Mode分发给下属函数来处理
         void ProcessKey(KeyEvent key);
+        bool Processmacro();
 
         void DealUndoList(Position pos={0,0});//对UndoList处理，太长则删掉。pos用于更新撤回前的光标状态
         void Handle_UndoAndRedo(bool ruletype);//0撤回 1回退
@@ -87,6 +88,10 @@ namespace sjtu
         std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符
 
         std::map<char,Register> register_;
+        Register recording_register_,playing_register;//分别是q和@
+        std::optional<char> recording_name,playing_name;
+        size_t playing_times;
+        std::optional<char> last_playing_name;
 
         Position last_cursor_;
 

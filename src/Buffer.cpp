@@ -238,16 +238,12 @@ namespace sjtu
         }
         if (column_left >= lines_[row_left].size())
         {
-            return;
+            column_left=lines_[row_left].size();
         }
         if (column_right > lines_[row_right].size())
         {
             column_right = lines_[row_right].size();
             crossline = true;
-        }
-        if (column_left < 0)
-        {
-            column_left = 0;
         }
         if (row_left == row_right)
         {
@@ -259,7 +255,7 @@ namespace sjtu
         {
             lines_[row_left].erase(lines_[row_left].begin() + column_left, lines_[row_left].end());
             lines_[row_right].erase(lines_[row_right].begin(), lines_[row_right].begin() + column_right);
-            EraseLines(row_left + 1, row_right + 1);
+            EraseLines(row_left + 1, row_right);
             JoinLine(row_left);
             if (crossline)
                 JoinLine(row_left);
@@ -323,6 +319,11 @@ namespace sjtu
     void Buffer::Achieve_LineUndo(std::size_t row, std::string line)
     {
         lines_[row] = line;
+    }
+
+    bool Buffer::Same_path(const std::filesystem::path &path) const
+    {
+        return path_==path;
     }
 
     void Buffer::Save()

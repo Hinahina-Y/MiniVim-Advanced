@@ -19,7 +19,7 @@ namespace sjtu
         size_t row = start_pos.row_, index = 0;
         if (row == end_pos.row_)
         {
-            reg2_.push_back(buffer.GetLineAt(row).substr(start_pos.column_, end_pos.column_));
+            reg2_.push_back(buffer.GetLineAt(row).substr(start_pos.column_, end_pos.column_ - start_pos.column_));
             return;
         }
         while (row < end_pos.row_ && row < buffer.GetLineCount())
@@ -28,6 +28,7 @@ namespace sjtu
                 reg2_.push_back(buffer.GetLineAt(start_pos.row_).substr(start_pos.column_));
             else
                 reg2_.push_back(buffer.GetLineAt(row));
+            row++;
         }
         if (row < buffer.GetLineCount())
             reg2_.push_back(buffer.GetLineAt(row).substr(0, end_pos.column_));
@@ -48,6 +49,13 @@ namespace sjtu
             reg2_.push_back(buffer.GetLineAt(row));
         }
     }
+
+    bool Register::Copy_into_Reg(const std::vector<std::string> &lines)
+    {
+        reg2_ = lines;
+        return !lines.empty();
+    }
+
     void Register::set_reg_kind(RegKind kind)
     {
         reg_kind = kind;
@@ -56,14 +64,14 @@ namespace sjtu
     {
         if (reg_kind == RegKind::charReg) // char
         {
-            window.SetCursor(buffer, start_pos, false);
+            window.SetCursor(buffer, start_pos, true);
             while (count > 0)
             {
                 size_t index{0};
                 while (index < reg2_.size())
                 {
                     buffer.InsertString(window.GetCursor().row_, window.GetCursor().column_, reg2_[index]);
-                    window.SetCursor(buffer, {window.GetCursor().row_, window.GetCursor().column_ + reg2_[index].size()}, false);
+                    window.SetCursor(buffer, {window.GetCursor().row_, window.GetCursor().column_ + reg2_[index].size()}, true);
                     if (index + 1 < reg2_.size())
                     {
                         buffer.SplitLine(window.GetCursor().row_, window.GetCursor().column_);
@@ -77,11 +85,9 @@ namespace sjtu
         }
         if (reg_kind == RegKind::lineReg) // line
         {
-            window.SetCursor(buffer, start_pos, false);
-            window.ApplyMotion(buffer, Motion::Goto_Front);
             for (size_t count_i = 0; count_i < count; count_i++)
             {
-                buffer.InsertLines(window.GetCursor().row_ + count_i * reg2_.size(), reg2_);
+                buffer.InsertLines(start_pos.row_ + count_i * reg2_.size(), reg2_);
             }
             return;
         }
@@ -91,7 +97,6 @@ namespace sjtu
     {
         Window temporary_window = window;
         size_t count{1};
-        reg1_.clear();
         reg2_.clear();
         if (editoraction.count_.has_value())
         {
@@ -103,6 +108,7 @@ namespace sjtu
             switch (*editoraction.motion_)
             {
             case Motion::Go_Copy:
+            case Motion::Go_Delete: // Go_Delete处理dd
                 set_reg_kind(RegKind::lineReg);
                 Copy_into_Reg(buffer, window.GetCursor().row_, window.GetCursor().row_ + count);
                 return !(reg2_.empty());
@@ -126,10 +132,7 @@ namespace sjtu
                 temporary_window.ApplyMotion(buffer, *editoraction.motion_);
                 if (temporary_window.GetCursor() < window.GetCursor())
                 {
-                    Position temp_cursor;
-                    temp_cursor = window.GetCursor();
-                    window.SetCursor(buffer, temporary_window.GetCursor(), true);
-                    temporary_window.SetCursor(buffer, temp_cursor, true);
+                    std::swap(temporary_window, window);
                 }
                 Copy_into_Reg(buffer, window.GetCursor(), temporary_window.GetCursor());
                 window.SetCursor(buffer, window.GetCursor(), false);
@@ -160,6 +163,7 @@ namespace sjtu
                 window.SetCursor(buffer, window.GetCursor(), false);
                 return !(reg2_.empty());
             }
+            break;
         case ActionType::To:
             set_reg_kind(RegKind::lineReg);
             temporary_window.ApplyJumpto(buffer, *editoraction.motion_, *editoraction.type_);
@@ -171,7 +175,7 @@ namespace sjtu
                 temporary_window.SetCursor(buffer, temp_cursor, true);
             }
             Copy_into_Reg(buffer, window.GetCursor().row_, temporary_window.GetCursor().row_ + 1);
-            break;
+            return !(reg2_.empty());
         case ActionType::Match:
             set_reg_kind(RegKind::charReg);
             Position match_pos = window.Parenthesis_Matching(buffer);
@@ -184,6 +188,10 @@ namespace sjtu
                 Position temp_cursor = match_pos;
                 match_pos = window.GetCursor();
                 window.SetCursor(buffer, temp_cursor, true);
+            }
+            else
+            {
+                match_pos.column_+1;
             }
             Copy_into_Reg(buffer, window.GetCursor(), match_pos);
             window.SetCursor(buffer, window.GetCursor(), false);
@@ -207,11 +215,68 @@ namespace sjtu
         if (reg_kind == RegKind::lineReg)
         {
             if (editoraction.motion_ == Motion::Left)
+            {
                 paste_outo_buffer(buffer, window, window.GetCursor(), count);
+                window.ApplyMotion(buffer, Motion::Goto_Front);
+            }
             else if (editoraction.motion_ == Motion::Right)
+            {
                 paste_outo_buffer(buffer, window, {window.GetCursor().row_ + 1, window.GetCursor().column_}, count);
+                window.SetCursor(buffer, {window.GetCursor().row_ + 1, window.GetCursor().column_}, false);
+                window.ApplyMotion(buffer, Motion::Goto_Front);
+            }
         }
         window.SetCursor(buffer, window.GetCursor(), false);
+    }
+
+    void Register::Record_key(KeyEvent key)
+    {
+        reg1_.push_back(key);
+    }
+
+    KeyEvent Register::Get_key()
+    {
+        reg1_ptr++;
+        return reg1_[reg1_ptr - 1];
+    }
+
+    bool Register::Finished()
+    {
+        return reg1_ptr >= reg1_.size();
+    }
+
+    void Register::Reset_ptr()
+    {
+        reg1_ptr = 0;
+    }
+
+    void Register::ClearRecord()
+    {
+        reg1_.clear();
+        reg1_ptr = 0;
+    }
+
+    void Register::Remove_back()
+    {
+        if (reg1_.size() > 0 && reg1_[reg1_.size() - 1].code_ == KeyCode::Character && reg1_[reg1_.size() - 1].value_ == 'q')
+        {
+            reg1_.pop_back();
+        }
+    }
+
+    void Register::addRegister(Register &&register1)
+    {
+        if (register1.reg_kind == RegKind::MotionReg)
+        {
+            reg_kind = RegKind::MotionReg;
+            reg1_ = std::move(register1.reg1_);
+            reg1_ptr = 0;
+        }
+        else
+        {
+            reg_kind = register1.reg_kind;
+            reg2_ = std::move(register1.reg2_);
+        }
     }
 
 } // namespace sjtu

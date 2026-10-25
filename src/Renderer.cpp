@@ -109,12 +109,16 @@ namespace sjtu
         }
         else if (state.mode_ == Mode::Normal) // 这是未执行的指令，显示在右下角
         {
+            if(state.Recording_!="")
+                bottom=state.Recording_;
             bottomvalue = window.GetBottomValue();
             bottomvalue += "    ";
         }
         else if (state.mode_ == Mode::Insert)
         {
             bottom = "-- INSERT --";
+            if(state.Recording_!="")
+                bottom+=" "+state.Recording_;
         }
         AppendClearedLine(frame, bottom, width, false);
         frame += "\x1b[0m";

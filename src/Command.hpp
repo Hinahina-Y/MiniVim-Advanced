@@ -42,6 +42,8 @@ namespace sjtu
         Paste,
         Adjust,           // 调整viewport
         Waiting_Argument, // 等待参数，并不是实际行动，而是一个用于处理指令的kind
+        Recording, //准备录制宏
+        Play,      //播放宏
         Undefined,
         // 在Advanced部分中你很可能需要添加别的ActionKind
     };

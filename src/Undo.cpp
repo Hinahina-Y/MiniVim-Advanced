@@ -73,13 +73,17 @@ namespace sjtu
 
     void Editor::DealUndoList(Position pos)
     {
-        bool is_modified = false;
+        if(playing_name.has_value()&&playing_times>0)//宏操作整体视为一个操作
+        {
+            return;
+        }
+        bool no_modified = false;
         if (!undo_list.empty())
         {
-            is_modified = true;
+            no_modified = true;
             if (undo_list[undo_position_ - 1].GetUndoLineCount() != buffer_.GetLineCount())
             {
-                is_modified = false;
+                no_modified = false;
             }
             else
             {
@@ -87,13 +91,13 @@ namespace sjtu
                 {
                     if (undo_list[undo_position_ - 1].GetUndoLineAt(i) != buffer_.GetLineAt(i))
                     {
-                        is_modified = false;
+                        no_modified = false;
                         break;
                     }
                 }
             }
         }
-        if (is_modified)
+        if (no_modified)
         {
             return;
         }

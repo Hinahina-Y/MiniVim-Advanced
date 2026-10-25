@@ -49,6 +49,12 @@ namespace sjtu
         while (running_)
         {
             RefreshScreen();
+            if (playing_name.has_value() && playing_times > 0) // 执行宏
+            {
+                if (Processmacro())
+                    continue;
+                DealUndoList(last_cursor_);
+            }
             ProcessKey(terminal_.ReadKey());
         }
         terminal_.ClearScreen();
@@ -65,7 +71,7 @@ namespace sjtu
         // 这里是你唯一需要调用Terminal中的接口的地方,请调用WriteOutput
         window_.Resize(terminal_.GetScreenSize());
         window_.EnsureCursorVisible(buffer_);
-        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, command_cursor, commandline_mode_}));
+        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, recording_name.has_value()?"recording @"+std::string(1,*recording_name):"",command_cursor, commandline_mode_}));
     }
 
     void Editor::Largely_Reset()
@@ -73,6 +79,22 @@ namespace sjtu
         window_.Renew_Lastparser();
         window_.RenewCount(std::nullopt);
         normal_parser_.Reset_editoraction(editoraction_);
+    }
+
+    bool Editor::Processmacro()
+    {
+        if (playing_register.Finished())
+        {
+            playing_register.Reset_ptr();
+            playing_times--;
+            if (playing_times == 0)
+            {
+                playing_name = std::nullopt;
+                return false;
+            }
+        }
+        ProcessKey(playing_register.Get_key());
+        return true;
     }
 
     void Editor::ProcessKey(KeyEvent key)
@@ -88,6 +110,10 @@ namespace sjtu
         if (undo_list.empty())
         {
             DealUndoList();
+        }
+        if (recording_name.has_value())
+        {
+            recording_register_.Record_key(key);//录制
         }
         switch (mode_)
         {
@@ -127,7 +153,7 @@ namespace sjtu
             return;
         }
         // 先处理Del删除指令(其他指令都是处理，这个是撤回)
-        if (action==(KeyEvent){KeyCode::Delete, ' '} && window_.GetLastparser().has_value())
+        if (action == (KeyEvent){KeyCode::Delete, ' '} && window_.GetLastparser().has_value())
         {
             std::string s_line = *window_.GetLastparser();
             window_.RenewCount(editoraction_.count_);
@@ -214,7 +240,11 @@ namespace sjtu
             case ActionKind::Delete:
                 if (editoraction_.motion_.has_value() && editoraction_.type_.has_value()) // 确定三个参数，1.向哪个方向删，2.以什么规则删 3.删多少（缺省为1)
                 {
-                    window_.ApplyDelete(buffer_, *editoraction_.motion_, editoraction_.type_); // 真正的删除操作
+                    Register temporary_register;
+                    if (temporary_register.Execute_copy(buffer_, window_, editoraction_))
+                        register_[editoraction_.argument_name_].addRegister(std::move(temporary_register)); // 先把要删除的元素拷入寄存器
+                    window_.SetCursor(buffer_, now_cursor, false);                                          // 光标复位
+                    window_.ApplyDelete(buffer_, *editoraction_.motion_, editoraction_.type_);              // 真正的删除操作
                     window_.SetCursor(buffer_, window_.GetCursor(), editoraction_.into_mode_ == Mode::Insert);
                     window_.EnsureCursorVisible(buffer_);
                     DealUndoList(now_cursor);
@@ -248,7 +278,7 @@ namespace sjtu
                 {
                     Register temporary_register;
                     if (temporary_register.Execute_copy(buffer_, window_, editoraction_))
-                        register_[editoraction_.argument_name_] = std::move(temporary_register);
+                        register_[editoraction_.argument_name_].addRegister(std::move(temporary_register));
                     window_.EnsureCursorVisible(buffer_);
                     Largely_Reset();
                 }
@@ -264,11 +294,36 @@ namespace sjtu
                     }
                     else
                     {
-                        message_ = "Error:Nothing in register " + std::string(1,editoraction_.argument_name_);
+                        message_ = "Error:Nothing in register " + std::string(1, editoraction_.argument_name_);
                     }
                     Largely_Reset();
                 }
                 return;
+            case ActionKind::Recording:
+                if (recording_name.has_value())
+                {
+                    recording_register_.Remove_back();
+                    register_[*recording_name].addRegister(std::move(recording_register_));
+                    recording_name = std::nullopt;
+                    Largely_Reset();
+                }
+                else
+                {
+                    Need_Arguments_ = true;
+                    return;
+                }
+                break;
+            case ActionKind::Play:
+                if (editoraction_.argument_name_ == '@')
+                {
+                    Execute_withArgument({KeyCode::Character, '@'});
+                    return;
+                }
+                else
+                {
+                    Need_Arguments_ = true;
+                    return;
+                }
             case ActionKind::Mark:
                 Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
                 return;
@@ -504,11 +559,63 @@ namespace sjtu
             if (key.code_ != KeyCode::Character)
             {
                 Largely_Reset();
+                Need_Arguments_ = false;
                 return;
             }
             editoraction_.argument_name_ = key.value_;
-            editoraction_.kind_=ActionKind::None;
+            editoraction_.kind_ = ActionKind::None;
             Need_Arguments_ = false;
+            return;
+
+        case ActionKind::Recording:
+            if (key.code_ != KeyCode::Character)
+            {
+                Largely_Reset();
+                return;
+            }
+            Largely_Reset();
+            recording_name = key.value_;
+            recording_register_.ClearRecord();
+            Need_Arguments_ = false;
+            return;
+        case ActionKind::Play:
+            if (key.code_ != KeyCode::Character)
+            {
+                Largely_Reset();
+                return;
+            }
+            Need_Arguments_ = false;
+            playing_times = 1;
+            if (editoraction_.count_.has_value())
+            {
+                playing_times = *editoraction_.count_;
+            }
+            if (key.value_ == '@')
+            {
+                if (last_playing_name.has_value())
+                {
+                    playing_name = last_playing_name;
+                }
+                else
+                {
+                    return;
+                }
+            }
+            else
+            {
+                last_playing_name = playing_name;
+                playing_name = key.value_;
+            }
+            if(register_.find(*playing_name)==register_.end())
+            {
+                playing_name=std::nullopt;
+                playing_times=0;
+                return;
+            }
+            playing_register = register_[*playing_name];
+            playing_register.Reset_ptr();
+            last_cursor_=window_.GetCursor();
+            Largely_Reset();
             return;
         }
     }
@@ -805,7 +912,7 @@ namespace sjtu
         // 1. path为空时调用Save,否则调用SaveAs
         // 2. 捕获保存时的异常,把错误写入message_并返回false
         // 3. 成功后生成包含文件名和行数的提示,返回true,供wq判断是否可以退出
-        if (!buffer_.IsModified() && !(buffer_.GetLineCount() == 1 && buffer_.GetLineAt(0) == ""))
+        if (!buffer_.IsModified() && !(buffer_.GetLineCount() == 1 && buffer_.GetLineAt(0) == "")&&(buffer_.Same_path(path)))
         {
             message_ = "No thing renewed.";
             return true;
