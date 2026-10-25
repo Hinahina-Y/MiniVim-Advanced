@@ -222,7 +222,7 @@ namespace sjtu
         lines_[row].erase(lines_[row].begin() + column_left, lines_[row].begin() + column_right);
     }
 
-    // 删除[left,right)的字母,这里left，right是两个坐标，中间字母指的是向右行走（允许跨行会遇到的字母).
+    // 删除[left,right)的字母,这里left，right是两个坐标，中间字母指的是向右行走（允许跨行时会遇到的字母).传入数据建议保证left<right
     void Buffer::EraseCharacters(std::size_t row_left, std::size_t column_left, std::size_t row_right, std::size_t column_right)
     {
         bool crossline = false;
@@ -230,6 +230,8 @@ namespace sjtu
         {
             std::swap(row_left, row_right);
             std::swap(column_left, column_right);
+            column_left++;
+            column_right++;//保证[left,right)
         }
         if (row_right >= lines_.size())
         {

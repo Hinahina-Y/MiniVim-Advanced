@@ -168,7 +168,7 @@ namespace sjtu
         EnsureCursorVisible(buffer);
     }
 
-    void Window::ApplyMoveword(const Buffer &buffer, Motion motion, bool rule_type)// 0word 1WORD
+    void Window::ApplyMoveword(const Buffer &buffer, Motion motion, bool rule_type) // 0word 1WORD
     {
         size_t count{1};
         std::string line;
@@ -297,6 +297,22 @@ namespace sjtu
         SetCursor(buffer, cursor_, false);
     }
 
+    void Window::ApplyReplace(Buffer &buffer, char c, Position start_pos, Position end_pos)
+    {
+        remaining_count_=std::nullopt;//行动数置零s
+        SetCursor(buffer,start_pos,true);
+        size_t steps{0};//防止一些奇妙的死循环
+        while(cursor_<end_pos&&steps<(size_t)(1<<30))
+        {
+            if(cursor_.row_<buffer.GetLineCount()&&cursor_.column_<buffer.GetLineAt(cursor_.row_).size())
+                buffer.ReplaceCharacter(cursor_.row_,cursor_.column_,c);
+            ApplyMotion(buffer,Motion::Right_allow_crossline);
+            steps++;
+            if(cursor_.row_+1==buffer.GetLineCount()&&cursor_.column_==buffer.GetLineAt(cursor_.row_).size())//end_pos在界外
+                break;
+        }
+    }
+
     void Window::DeleteCharacters(Buffer &buffer, Motion motion)
     {
         size_t count{1};
@@ -320,6 +336,7 @@ namespace sjtu
             break;
         }
     }
+
 
     void Window::ApplyDelete(Buffer &buffer, Motion motion, std::optional<ActionType> type)
     {
@@ -898,10 +915,21 @@ namespace sjtu
         return cursor_;
     }
 
+    const Position &Window::GetAnchor() const
+    {
+        // 返回当前光标位置的只读引用
+        return anchor_;
+    }
+
     const Viewport &Window::GetViewport() const
     {
         // 返回当前可见区域的只读引用,供Renderer绘制
         return viewport_;
+    }
+
+    void Window::SetAnchor(Position position)
+    {
+        anchor_ = position;
     }
 
     void Window::SetCursor(const Buffer &buffer, Position position, bool allow_line_end)

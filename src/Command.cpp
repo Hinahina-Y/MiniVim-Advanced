@@ -142,6 +142,10 @@ namespace sjtu
                 return {ActionKind::None, std::nullopt, std::nullopt, ActionType::Max};
             case '"':
                 return {ActionKind::Waiting_Argument, std::nullopt, std::nullopt, std::nullopt,Mode::Normal,'"'};
+            case 'v':
+                return {ActionKind::ShiftMode, std::nullopt,std::nullopt, std::nullopt, Mode::Visual};
+            case 'V':
+                return {ActionKind::ShiftMode, std::nullopt,std::nullopt, std::nullopt, Mode::Visual_Line};
             default:
                 break;
             }

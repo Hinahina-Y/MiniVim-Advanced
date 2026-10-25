@@ -10,64 +10,72 @@ Window保存光标位置和正文的可见区域,根据Buffer的行数和行长�
 #include "Types.hpp"
 #include <optional>
 
-namespace sjtu {
+namespace sjtu
+{
 
-namespace Assist{// 一些辅助函数
-    int WordJudge(char c, bool rule_type);
-    int Braces(char c);
-    char ShiftLetterCase(char c);
-}
+    namespace Assist
+    { // 一些辅助函数
+        int WordJudge(char c, bool rule_type);
+        int Braces(char c);
+        char ShiftLetterCase(char c);
+    }
 
-class Window {
+    class Window
+    {
 
-public:
-    void Resize(ScreenSize terminal_size);
+    public:
+        void Resize(ScreenSize terminal_size);
 
-    void ApplyMotion(const Buffer& buffer, Motion motion);
+        void ApplyMotion(const Buffer &buffer, Motion motion);
 
-    void ApplyMoveword(const Buffer& buffer, Motion motion,bool rule_type);
+        void ApplyMoveword(const Buffer &buffer, Motion motion, bool rule_type);
 
-    void ApplyJumpto(const Buffer& buffer, Motion motion,ActionType type);
+        void ApplyJumpto(const Buffer &buffer, Motion motion, ActionType type);
 
-    void ApplyShift(Buffer& buffer,Motion motion);
+        void ApplyShift(Buffer &buffer, Motion motion);
+        void ApplyReplace(Buffer &buffer,char c,Position start_pos,Position end_pos);//[start,end)
+        
+
+        Position Parenthesis_Matching(const Buffer &buffer) const;
+        Position String_searching(const Buffer &buffer, Motion motion, std::string search_string);
+
+        void EnsureCursorVisible(const Buffer &buffer);
+        void AdjustViewport(const Buffer &buffer, Motion motion, ActionType type);
+
+        void ApplyDelete(Buffer &buffer, Motion motion, std::optional<ActionType> type);
+        void ApplyIndent(Buffer &buffer, Motion motion, std::optional<ActionType> type, bool Is_Indent);
+        void ApplySearch(Buffer &buffer, Motion motion, std::string search_string);
 
 
-    
-    Position Parenthesis_Matching(const Buffer& buffer) const;
-    Position String_searching(const Buffer& buffer,Motion motion,std::string search_string);
+        void RenewCount(std::optional<size_t> expected_count); // 更新window里的剩余count值
+        void Renew_Lastparser(char lastparser);                // 记录上一个按键
+        void Renew_Lastparser();                               // 清空按键记录
+        std::string GetBottomValue() const;
+        std::optional<std::string> GetLastparser() const;
 
-    void EnsureCursorVisible(const Buffer& buffer);
-    void AdjustViewport(const Buffer& buffer,Motion motion,ActionType type);
+        // allow_line_end为true时允许停在最后一个字符之后,供插入模式使用
+        void SetCursor(const Buffer &buffer, Position position, bool allow_line_end);
+        void SetAnchor(Position position);
+        const Position &GetCursor() const;
+        const Position &GetAnchor() const;
+        const Viewport &GetViewport() const;
 
-    void ApplyDelete(Buffer &buffer,Motion motion,std::optional<ActionType> type);
-    void ApplyIndent(Buffer &buffer,Motion motion,std::optional<ActionType> type,bool Is_Indent);
-    void ApplySearch(Buffer &buffer,Motion motion,std::string search_string);
+    private:
+        void MoveLeft(const Buffer &buffer, size_t count);
+        void MoveRight(const Buffer &buffer, size_t count);
+        void MoveUp(const Buffer &buffer, size_t count);
+        void MoveDown(const Buffer &buffer, size_t count);
+        void DeleteCharacters(Buffer &buffer, Motion motion); // 一个更为具体的delete操作
 
-    void RenewCount(std::optional<size_t> expected_count);//更新window里的剩余count值
-    void Renew_Lastparser(char lastparser);//记录上一个按键
-    void Renew_Lastparser();//清空按键记录
-    std::string GetBottomValue() const;
-    std::optional<std::string> GetLastparser() const;
+        Position cursor_{};        // Buffer中的光标位置
+        Viewport viewport_{};      // 正文可见区域及其滚动偏移
+        size_t desired_column_{0}; // 上下移动时希望保持的显示列,经过短行时也保留这个目标
 
-    //allow_line_end为true时允许停在最后一个字符之后,供插入模式使用
-    void SetCursor(const Buffer& buffer, Position position, bool allow_line_end);
-    const Position& GetCursor() const ;
-    const Viewport& GetViewport() const ;
+        std::optional<size_t> remaining_count_{};  // 记录留存的数字
+        std::optional<std::string> Last_parser_{}; // 记录之前的按键
 
-private:
-    void MoveLeft(const Buffer& buffer, size_t count);
-    void MoveRight(const Buffer& buffer, size_t count);
-    void MoveUp(const Buffer& buffer, size_t count);
-    void MoveDown(const Buffer& buffer, size_t count);
-    void DeleteCharacters(Buffer &buffer,Motion motion); //一个更为具体的delete操作
-
-    Position cursor_{}; //Buffer中的光标位置
-    Viewport viewport_{}; //正文可见区域及其滚动偏移
-    size_t desired_column_{0}; //上下移动时希望保持的显示列,经过短行时也保留这个目标
-
-    std::optional<size_t> remaining_count_{};//记录留存的数字
-    std::optional<std::string>  Last_parser_{};//记录之前的按键
-};
+        Position anchor_; // 用于Visual Mode，记录锚点
+    };
 
 } // namespace sjtu
 

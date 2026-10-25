@@ -12,10 +12,7 @@ namespace sjtu
     {
         if (end_pos < start_pos)
             return;
-        if (reg_kind != RegKind::charReg)
-        {
-            return;
-        }
+        reg_kind = RegKind::charReg;//强制变为列型
         size_t row = start_pos.row_, index = 0;
         if (row == end_pos.row_)
         {
@@ -36,10 +33,7 @@ namespace sjtu
     }
     void Register::Copy_into_Reg(const Buffer &buffer, size_t row_up, size_t row_down) // 复制[up,down)行的内容
     {
-        if (reg_kind != RegKind::lineReg)
-        {
-            return;
-        }
+        reg_kind = RegKind::lineReg;//强制变为行型
         if (row_down > buffer.GetLineCount())
         {
             row_down = buffer.GetLineCount();
@@ -212,7 +206,7 @@ namespace sjtu
             else if (editoraction.motion_ == Motion::Right)
                 paste_outo_buffer(buffer, window, {window.GetCursor().row_, window.GetCursor().column_ + 1}, count);
         }
-        if (reg_kind == RegKind::lineReg)
+        if (reg_kind == RegKind::lineReg)   
         {
             if (editoraction.motion_ == Motion::Left)
             {

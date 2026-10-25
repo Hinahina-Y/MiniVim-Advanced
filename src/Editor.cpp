@@ -71,7 +71,7 @@ namespace sjtu
         // 这里是你唯一需要调用Terminal中的接口的地方,请调用WriteOutput
         window_.Resize(terminal_.GetScreenSize());
         window_.EnsureCursorVisible(buffer_);
-        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, recording_name.has_value()?"recording @"+std::string(1,*recording_name):"",command_cursor, commandline_mode_}));
+        terminal_.WriteOutput(renderer_.Render(buffer_, window_, RenderState{mode_, command_, message_, recording_name.has_value() ? "recording @" + std::string(1, *recording_name) : "", command_cursor, commandline_mode_}));
     }
 
     void Editor::Largely_Reset()
@@ -113,16 +113,14 @@ namespace sjtu
         }
         if (recording_name.has_value())
         {
-            recording_register_.Record_key(key);//录制
+            recording_register_.Record_key(key); // 录制
         }
         switch (mode_)
         {
         case Mode::Normal:
             message_ = "";
             if (key.code_ == KeyCode::Character)
-            {
                 window_.Renew_Lastparser(key.value_);
-            }
             if (Need_Arguments_) // 如果现在输入的字符是参数而不是操作
             {
                 Execute_withArgument(key);
@@ -135,6 +133,22 @@ namespace sjtu
             break;
         case Mode::CommandLine:
             HandleCommandLine(key);
+            break;
+        case Mode::Visual:
+        case Mode::Visual_Line:
+            if (key.code_ == KeyCode::Character)
+                window_.Renew_Lastparser(key.value_);
+            if (key.code_ == KeyCode::Escape)
+            {
+                mode_ = Mode::Normal;
+                break;
+            }
+            if (Need_Arguments_) // 如果现在输入的字符是参数而不是操作
+            {
+                Execute_withArgument(key);
+                break;
+            }
+            HandleVisual(key);
             break;
         }
     }
@@ -150,21 +164,6 @@ namespace sjtu
             normal_parser_.Reset_editoraction(editoraction_);
             message_ = e.what();
             Largely_Reset();
-            return;
-        }
-        // 先处理Del删除指令(其他指令都是处理，这个是撤回)
-        if (action == (KeyEvent){KeyCode::Delete, ' '} && window_.GetLastparser().has_value())
-        {
-            std::string s_line = *window_.GetLastparser();
-            window_.RenewCount(editoraction_.count_);
-            window_.Renew_Lastparser();
-            normal_parser_.Reset_editoraction(editoraction_);
-            for (size_t index = 0; index + 1 < s_line.size(); index++) // 去除最后一个字符，重新读取
-            {
-                window_.Renew_Lastparser(s_line[index]);
-                normal_parser_.Merge_editoraction(editoraction_, normal_parser_.Feed({KeyCode::Character, s_line[index]}));
-                window_.RenewCount(editoraction_.count_);
-            }
             return;
         }
 
@@ -413,6 +412,13 @@ namespace sjtu
                 mode_ = Mode::CommandLine;
                 normal_parser_.Reset_editoraction(editoraction_);
                 return;
+            case ActionKind::ShiftMode:
+                message_ = "";
+                mode_ = editoraction_.into_mode_;
+                if (editoraction_.into_mode_ == Mode::Visual || editoraction_.into_mode_ == Mode::Visual_Line)
+                    window_.SetAnchor(window_.GetCursor());
+                Largely_Reset();
+                return;
             case ActionKind::Search:
                 if (editoraction_.into_mode_ == Mode::CommandLine)
                 {
@@ -474,53 +480,64 @@ namespace sjtu
             size_t count{1};
             if (editoraction_.count_.has_value())
                 count = *editoraction_.count_;
-            Position cursor_pos = window_.GetCursor();
-            size_t line_length = buffer_.GetLineAt(cursor_pos.row_).size();
+            const Position &cursor_pos = window_.GetCursor();
+
             if (key.code_ == KeyCode::Escape)
             {
                 Need_Arguments_ = false;
-                normal_parser_.Reset_editoraction(editoraction_);
-                window_.Renew_Lastparser();
-                window_.RenewCount(std::nullopt);
-                DealUndoList(now_cursor);
+                Largely_Reset();
                 return;
             }
-            if (cursor_pos.column_ + count > line_length)
+            if (mode_ == Mode::Normal)
             {
-                message_ = "WRONG:No Enough characters.";
-            }
-            else if (key.code_ == KeyCode::Character)
-            {
-                size_t i = 0;
-                while (i < count)
+                size_t line_length = buffer_.GetLineAt(cursor_pos.row_).size();
+                if (cursor_pos.column_ + count > line_length)
                 {
-                    buffer_.ReplaceCharacter(cursor_pos.row_, cursor_pos.column_ + i, key.value_);
-                    i++;
+                    message_ = "WRONG:No Enough characters.";
                 }
-                if (count > 1)
+
+                if (key.code_ == KeyCode::Character)
                 {
-                    window_.RenewCount(count - 1);
-                    window_.ApplyMotion(buffer_, Motion::Right);
+                    window_.ApplyReplace(buffer_, key.value_, cursor_pos, {cursor_pos.row_, cursor_pos.column_ + count});
+                    window_.ApplyMotion(buffer_, Motion::Left); // 左移一位
+                }
+                else if (key.code_ == KeyCode::Enter)
+                {
+                    size_t i = 0;
+                    while (i < count)
+                    {
+                        buffer_.SplitLine(cursor_pos.row_, cursor_pos.column_ + 1);
+                        buffer_.EraseCharacter(cursor_pos.row_, cursor_pos.column_ + 1);
+                        window_.ApplyMotion(buffer_, Motion::Go_Down_Line);
+                        i++;
+                    }
+                    window_.ApplyMotion(buffer_, Motion::Go_Up_Line);
                     window_.SetCursor(buffer_, window_.GetCursor(), false);
                     window_.EnsureCursorVisible(buffer_);
                 }
-            }
-            else if (key.code_ == KeyCode::Enter)
-            {
-                size_t i = 0;
-                while (i < count)
-                {
-                    buffer_.SplitLine(cursor_pos.row_, cursor_pos.column_ + 1);
-                    buffer_.EraseCharacter(cursor_pos.row_, cursor_pos.column_ + 1);
-                    window_.ApplyMotion(buffer_, Motion::Go_Down_Line);
-                    cursor_pos = window_.GetCursor();
-                    i++;
-                }
-                window_.ApplyMotion(buffer_, Motion::Go_Up_Line);
                 window_.SetCursor(buffer_, window_.GetCursor(), false);
-                window_.EnsureCursorVisible(buffer_);
             }
+            else if (mode_ == Mode::Visual)
+            {
+                const Position &anchor_pos = window_.GetAnchor();
+                if (anchor_pos == cursor_pos)
+                    return;
+                else if (anchor_pos < cursor_pos)
+                    window_.ApplyReplace(buffer_, key.value_, anchor_pos, cursor_pos);
+                else
+                    window_.ApplyReplace(buffer_, key.value_, {cursor_pos.row_, cursor_pos.column_ + 1}, {anchor_pos.row_, anchor_pos.column_ + 1});
+            }
+            else if (mode_ == Mode::Visual_Line)
+            {
+                const Position &anchor_pos = window_.GetAnchor();
+                size_t row_a = cursor_pos.row_, row_b = anchor_pos.row_;
+                if (row_a > row_b)
+                    std::swap(row_a, row_b);
+                window_.ApplyReplace(buffer_, key.value_, {row_a, 0}, {row_b, buffer_.GetLineAt(row_b).size()});
+            }
+            window_.EnsureCursorVisible(buffer_);
             Need_Arguments_ = false;
+            mode_ = Mode::Normal; // 切换为普通模式
             Largely_Reset();
             DealUndoList(now_cursor);
             return;
@@ -606,15 +623,15 @@ namespace sjtu
                 last_playing_name = playing_name;
                 playing_name = key.value_;
             }
-            if(register_.find(*playing_name)==register_.end())
+            if (register_.find(*playing_name) == register_.end())
             {
-                playing_name=std::nullopt;
-                playing_times=0;
+                playing_name = std::nullopt;
+                playing_times = 0;
                 return;
             }
             playing_register = register_[*playing_name];
             playing_register.Reset_ptr();
-            last_cursor_=window_.GetCursor();
+            last_cursor_ = window_.GetCursor();
             Largely_Reset();
             return;
         }
@@ -907,12 +924,384 @@ namespace sjtu
         mode_ = Mode::Normal;
     }
 
+    void Editor::HandleVisual(KeyEvent key) // 处理Visual模式
+    {
+        EditorAction action = normal_parser_.Feed(key);
+        try // 检查是否有组合按键的操作
+        {
+            normal_parser_.Merge_editoraction(editoraction_, action);
+        }
+        catch (const std::runtime_error &e)
+        {
+            normal_parser_.Reset_editoraction(editoraction_);
+            message_ = e.what();
+            Largely_Reset();
+            return;
+        }
+
+        if (editoraction_.kind_ == ActionKind::Undefined)
+        {
+            Largely_Reset();
+            return;
+        }
+        window_.RenewCount(editoraction_.count_); // 更新含[Count]的组合按键Count值
+        size_t count{1}, index{1};
+        bool Modified = false;
+        Position now_cursor = window_.GetCursor();
+        const Position cursor_pos{window_.GetCursor()}, anchor_pos{window_.GetAnchor()};
+        if (editoraction_.count_.has_value())
+            count = *editoraction_.count_;
+
+        // 根据Action的种类调用对应模块
+        try
+        {
+            switch (editoraction_.kind_)
+            {
+            case ActionKind::None:
+                return;
+            case ActionKind::Waiting_Argument:
+                Need_Arguments_ = true; // 需要参数
+                return;
+            case ActionKind::Move:
+                // 交给Window吧，move即可
+                if (!editoraction_.type_.has_value()) // 防止一些意外情况
+                {
+                    Largely_Reset();
+                    message_ = "ERROR:UNKNOWN-Move (with no type).";
+                    return;
+                }
+                switch (*editoraction_.type_)
+                {
+                case ActionType::Ordinary:
+                    window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                    break;
+                case ActionType::word:
+                case ActionType::WORD:
+                    window_.ApplyMoveword(buffer_, *editoraction_.motion_, *editoraction_.type_ == ActionType::WORD);
+                    break;
+                case ActionType::Match:
+                    Position match_pos = window_.Parenthesis_Matching(buffer_);
+                    if (match_pos.row_ < buffer_.GetLineCount())
+                        window_.SetCursor(buffer_, match_pos, true);
+                    else
+                        message_ = "Error:Patterns could not be found";
+                    break;
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), true);
+                Largely_Reset();
+                return;
+            case ActionKind::Undo:
+            case ActionKind::Redo: // 导致退出VisualMode
+                mode_ = Mode::Normal;
+                return;
+            case ActionKind::Replace:
+                Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
+                return;
+            case ActionKind::Delete:
+                if (mode_ == Mode::Visual && cursor_pos != anchor_pos)
+                {
+                    if (anchor_pos < cursor_pos)
+                    {
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, anchor_pos, cursor_pos);
+                        buffer_.EraseCharacters(anchor_pos.row_, anchor_pos.column_, cursor_pos.row_, cursor_pos.column_);
+                        window_.SetCursor(buffer_, anchor_pos, true);
+                    }
+                    else
+                    {
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, {cursor_pos.row_, cursor_pos.column_ + 1}, {anchor_pos.row_, anchor_pos.column_ + 1});
+                        buffer_.EraseCharacters(cursor_pos.row_, cursor_pos.column_ + 1, anchor_pos.row_, anchor_pos.column_ + 1);
+                        window_.SetCursor(buffer_, cursor_pos, true);
+                    }
+                }
+                else if (mode_ == Mode::Visual_Line)
+                {
+                    if (anchor_pos.row_ < cursor_pos.row_)
+                    {
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, anchor_pos.row_, cursor_pos.row_ + 1);
+                        buffer_.EraseLines(anchor_pos.row_, cursor_pos.row_ + 1);
+                        if (anchor_pos.row_ > 0)
+                            window_.SetCursor(buffer_, {anchor_pos.row_ - 1, 0}, true);
+                        else
+                            window_.SetCursor(buffer_, {0, 0}, true);
+                    }
+                    else
+                    {
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, cursor_pos.row_, anchor_pos.row_ + 1);
+                        buffer_.EraseLines(cursor_pos.row_, anchor_pos.row_ + 1);
+                        if (cursor_pos.row_ > 0)
+                            window_.SetCursor(buffer_, {cursor_pos.row_ - 1, 0}, true);
+                        else
+                            window_.SetCursor(buffer_, {0, 0}, true);
+                    }
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), editoraction_.into_mode_ == Mode::Insert);
+                window_.EnsureCursorVisible(buffer_);
+                DealUndoList(now_cursor);
+                mode_ = Mode::Normal;
+                if (editoraction_.into_mode_ == Mode::Insert) // change
+                    EnterInsert(window_.GetCursor());
+                Largely_Reset();
+                return;
+            case ActionKind::Jump_To: // 确定3个参数 1.往什么方向跳跃 2.跳多少(缺省为1) 3.跳跃规则
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    window_.ApplyJumpto(buffer_, *editoraction_.motion_, *editoraction_.type_);
+                    window_.EnsureCursorVisible(buffer_);
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Indent:
+                if (mode_ == Mode::Visual_Line)
+                {
+                    for (size_t row = std::min(cursor_pos.row_, anchor_pos.row_); row <= std::max(cursor_pos.row_, anchor_pos.row_) && row < buffer_.GetLineCount(); row++)
+                    {
+                        buffer_.InsertCharacters(row, 0, '\t', 2 * (*editoraction_.count_));
+                        window_.RenewCount(2 * (*editoraction_.count_));
+                        window_.ApplyMotion(buffer_, Motion::Right);
+                    }
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), false);
+                window_.EnsureCursorVisible(buffer_);
+                DealUndoList(now_cursor);
+                mode_ = Mode::Normal;
+                Largely_Reset();
+                return;
+            case ActionKind::Unindent:
+                if (mode_ == Mode::Visual_Line)
+                {
+                    for (size_t row = std::min(cursor_pos.row_, anchor_pos.row_); row <= std::max(cursor_pos.row_, anchor_pos.row_) && row < buffer_.GetLineCount(); row++)
+                    {
+                        buffer_.EraseIndent(row, 8 * (*editoraction_.count_));
+                        window_.RenewCount(2 * (*editoraction_.count_));
+                        window_.ApplyMotion(buffer_, Motion::Left);
+                    }
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), false);
+                window_.EnsureCursorVisible(buffer_);
+                DealUndoList(now_cursor);
+                mode_ = Mode::Normal;
+                Largely_Reset();
+                return;
+            case ActionKind::Copy:
+                if (mode_ == Mode::Visual && window_.GetCursor() != window_.GetAnchor())
+                {
+                    if (anchor_pos < cursor_pos)
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, anchor_pos, cursor_pos);
+                    else
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, {cursor_pos.row_, cursor_pos.column_ + 1}, {anchor_pos.row_, anchor_pos.column_ + 1});
+                }
+                else if (mode_ == Mode::Visual_Line)
+                {
+                    if (anchor_pos.row_ < cursor_pos.row_)
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, anchor_pos.row_, cursor_pos.row_ + 1);
+                    else
+                        register_[editoraction_.argument_name_].Copy_into_Reg(buffer_, cursor_pos.row_, anchor_pos.row_ + 1);
+                }
+                mode_ = Mode::Normal;
+                return;
+            case ActionKind::Paste:
+                if (editoraction_.motion_.has_value() && editoraction_.type_.has_value())
+                {
+                    if (register_.find(editoraction_.argument_name_) != register_.end())
+                    {
+                        register_[editoraction_.argument_name_].Execute_paste(buffer_, window_, editoraction_);
+                        window_.EnsureCursorVisible(buffer_);
+                        DealUndoList(now_cursor);
+                    }
+                    else
+                    {
+                        message_ = "Error:Nothing in register " + std::string(1, editoraction_.argument_name_);
+                    }
+                    Largely_Reset();
+                }
+                return;
+            case ActionKind::Recording:
+                if (recording_name.has_value())
+                {
+                    recording_register_.Remove_back();
+                    register_[*recording_name].addRegister(std::move(recording_register_));
+                    recording_name = std::nullopt;
+                    Largely_Reset();
+                }
+                else
+                {
+                    Need_Arguments_ = true;
+                    return;
+                }
+                break;
+            case ActionKind::Play:
+                if (editoraction_.argument_name_ == '@')
+                {
+                    Execute_withArgument({KeyCode::Character, '@'});
+                    return;
+                }
+                else
+                {
+                    Need_Arguments_ = true;
+                    return;
+                }
+            case ActionKind::Mark:
+                Need_Arguments_ = true; // 我们需要参数，所以这次处理不掉
+                return;
+            case ActionKind::Shift:
+                if (mode_ == Mode::Visual && window_.GetCursor() != window_.GetAnchor())
+                {
+                    if (anchor_pos < cursor_pos)
+                    {
+                        for (size_t row = anchor_pos.row_; row <= cursor_pos.row_ && row < buffer_.GetLineCount(); row++)
+                        {
+                            for (size_t column = 0; column < buffer_.GetLineAt(row).size(); column++)
+                            {
+                                if ((Position){row, column} < anchor_pos || cursor_pos <= (Position){row, column})
+                                    continue;
+                                buffer_.ReplaceCharacter(row, column, Assist::ShiftLetterCase(buffer_.GetLineAt(row)[column]));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (size_t row = cursor_pos.row_; row <= anchor_pos.row_ && row < buffer_.GetLineCount(); row++)
+                        {
+                            for (size_t column = 0; column < buffer_.GetLineAt(row).size(); column++)
+                            {
+                                if (anchor_pos < (Position){row, column} || (Position){row, column} <= cursor_pos)
+                                    continue;
+                                buffer_.ReplaceCharacter(row, column, Assist::ShiftLetterCase(buffer_.GetLineAt(row)[column]));
+                            }
+                        }
+                    }
+                }
+                if (mode_ == Mode::Visual_Line)
+                {
+                    for (size_t row = std::min(cursor_pos.row_, anchor_pos.row_); row <= std::max(cursor_pos.row_, anchor_pos.row_) && row < buffer_.GetLineCount(); row++)
+                    {
+                        for (size_t column = 0; column < buffer_.GetLineAt(row).size(); column++)
+                        {
+                            buffer_.ReplaceCharacter(row, column, Assist::ShiftLetterCase(buffer_.GetLineAt(row)[column]));
+                        }
+                    }
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), false);
+                window_.EnsureCursorVisible(buffer_);
+                DealUndoList(now_cursor);
+                mode_ = Mode::Normal;
+                Largely_Reset();
+                return;
+                Largely_Reset();
+                return;
+            case ActionKind::MergeLine: // 处理J
+                for (index = 1; index <= count; index++)
+                {
+                    if (window_.GetCursor().row_ + 1 < buffer_.GetLineCount())
+                    {
+                        std::string_view s_line = buffer_.GetLineAt(window_.GetCursor().row_);
+                        if (s_line.size() > 0 && s_line[s_line.size() - 1] != ' ')
+                        {
+                            buffer_.InsertCharacter(window_.GetCursor().row_, s_line.size(), ' ');
+                            s_line = buffer_.GetLineAt(window_.GetCursor().row_ + 1);
+                            index = 0;
+                            while (index < s_line.size() && (s_line[index] == ' ' || s_line[index] == '\t'))
+                            {
+                                index++;
+                                buffer_.EraseCharacter(window_.GetCursor().row_ + 1, index);
+                            }
+                            buffer_.JoinLine(window_.GetCursor().row_);
+                            window_.SetCursor(buffer_, window_.GetCursor(), false);
+                        }
+                        Modified = true;
+                    }
+                    else
+                        break;
+                }
+                Largely_Reset();
+                if (Modified)
+                    DealUndoList(now_cursor);
+                mode_ = Mode::Normal;
+                return;
+            case ActionKind::InsertBefore:
+                // 进入InsertMode,Editor自己就有对应方法
+                Insert_Keys_.clear();
+                if (editoraction_.motion_.has_value())
+                {
+                    switch (*editoraction_.motion_)
+                    {
+                    case Motion::Up:
+                        buffer_.SplitLine(now_cursor.row_, 0);
+                        window_.SetCursor(buffer_, {now_cursor.row_, 0}, true);
+                        break;
+                    case Motion::Goto_First_Noblank:
+                        window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                EnterInsert(window_.GetCursor());
+                return;
+            case ActionKind::InsertAfter:
+                // 从当前Char之后进入InsertMode
+                // 特判:如果Buffer表示当前Cursor所在的行是空的怎么办?
+                Insert_Keys_.clear();
+                if (editoraction_.motion_.has_value())
+                {
+                    switch (*editoraction_.motion_)
+                    {
+                    case Motion::Down:
+                        buffer_.SplitLine(now_cursor.row_ + 1, 0);
+                        window_.SetCursor(buffer_, {now_cursor.row_ + 1, 0}, true);
+                        Insert_Keys_.push_back({KeyCode::Enter, '\r'});
+                        break;
+                    case Motion::Goto_Back:
+                        window_.ApplyMotion(buffer_, *editoraction_.motion_);
+                        break;
+                    case Motion::Right:
+                        window_.ApplyMotion(buffer_, Motion::Right);
+                    default:
+                        break;
+                    }
+                }
+                window_.SetCursor(buffer_, window_.GetCursor(), true);
+                EnterInsert(window_.GetCursor());
+                return;
+            case ActionKind::EnterCommandLine:
+                // 进入Command Mode
+                // 记得清空当前的message之类的遗留状态
+                message_ = "";
+                command_ = "";
+                commandline_mode_ = ":";
+                mode_ = Mode::CommandLine;
+                normal_parser_.Reset_editoraction(editoraction_);
+                return;
+            case ActionKind::ShiftMode:
+                message_ = "";
+                mode_ = Mode::Normal;
+                Largely_Reset();
+                return;
+            case ActionKind::Adjust:
+                if (editoraction_.type_.has_value() && editoraction_.motion_.has_value())
+                {
+                    window_.AdjustViewport(buffer_, *editoraction_.motion_, *editoraction_.type_);
+                    Largely_Reset();
+                    return;
+                }
+                return;
+            }
+        }
+        catch (const std::runtime_error &e)
+        {
+            Largely_Reset();
+            message_ = e.what();
+            return;
+        }
+        Largely_Reset();
+    }
+
     bool Editor::SaveBuffer(const std::filesystem::path &path)
     {
         // 1. path为空时调用Save,否则调用SaveAs
         // 2. 捕获保存时的异常,把错误写入message_并返回false
         // 3. 成功后生成包含文件名和行数的提示,返回true,供wq判断是否可以退出
-        if (!buffer_.IsModified() && !(buffer_.GetLineCount() == 1 && buffer_.GetLineAt(0) == "")&&(buffer_.Same_path(path)))
+        if (!buffer_.IsModified() && !(buffer_.GetLineCount() == 1 && buffer_.GetLineAt(0) == "") && (buffer_.Same_path(path)))
         {
             message_ = "No thing renewed.";
             return true;

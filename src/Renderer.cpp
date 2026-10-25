@@ -47,7 +47,7 @@ namespace sjtu
         // 处理高亮
         Position now_cursor_{window.GetCursor()}, matched_cursor_{buffer.GetLineCount(), 0}; // 管理括号匹配导致高亮
         std::string line = buffer.GetLineAt(now_cursor_.row_);
-        std::vector<std::pair<std::string, Position>> Highlight; // 需要高亮的位置
+        std::vector<std::pair<std::string, Position>> Highlight; // 需要高亮的单个字符位置
         Highlight.clear();
         if (now_cursor_.column_ < line.size() && Assist::Braces(line[now_cursor_.column_]) != 0) // 括号匹配
         {
@@ -61,6 +61,46 @@ namespace sjtu
             if (matched_cursor_.row_ >= viewport.top_ && matched_cursor_.row_ < viewport.top_ + viewport.rows_)
                 Highlight.push_back({"\x1b[104;97m", matched_cursor_});
         }
+
+        // Visual Mode 字符高亮
+        const Position &cursor_pos{window.GetCursor()}, anchor_pos{window.GetAnchor()};
+        std::string Line_Highlight_tag = "";
+        if (state.mode_ == Mode::Visual)
+        {
+            if (anchor_pos < cursor_pos)
+            {
+                if (anchor_pos.row_ == cursor_pos.row_)
+                {
+                    for (size_t column = std::max(anchor_pos.column_, viewport.left_); column < std::min(cursor_pos.column_, viewport.left_ + viewport.columns_); column++)
+                    {
+                        Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
+                    }
+                }
+                else
+                {
+                    if (anchor_pos.row_ >= viewport.top_)
+                        for (size_t column = std::max(anchor_pos.column_, viewport.left_); column < std::min(buffer.GetLineAt(anchor_pos.row_).size(), viewport.left_ + viewport.columns_); column++)
+                            Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
+                    for (size_t column = std::max((size_t)0, viewport.left_); column < std::min(cursor_pos.column_, viewport.left_ + viewport.columns_); column++)
+                        Highlight.push_back({"\x1b[30;47m", {cursor_pos.row_, column}});
+                }
+            }
+            else if (cursor_pos < anchor_pos)
+            {
+                if (anchor_pos.row_ == cursor_pos.row_)
+                    for (size_t column = std::max(cursor_pos.column_ + 1, viewport.left_); column < std::min(anchor_pos.column_ + 1, viewport.left_ + viewport.columns_); column++)
+                        Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
+                else
+                {
+                    for (size_t column = std::max(cursor_pos.column_ + 1, viewport.left_); column < std::min(buffer.GetLineAt(cursor_pos.row_).size(), viewport.left_ + viewport.columns_); column++)
+                        Highlight.push_back({"\x1b[30;47m", {cursor_pos.row_, column}});
+                    if (anchor_pos.row_ < viewport.top_ + viewport.rows_)
+                        for (size_t column = std::max((size_t)0, viewport.left_); column < std::min(anchor_pos.column_ + 1, viewport.left_ + viewport.columns_); column++)
+                            Highlight.push_back({"\x1b[30;47m", {anchor_pos.row_, column}});
+                }
+            }
+        }
+
         // 正式输出
         for (std::size_t screen_row = 0; screen_row < viewport.rows_; ++screen_row)
         {
@@ -73,6 +113,7 @@ namespace sjtu
             }
             else
             {
+                // 截取字符
                 line = ExpandForDisplay(buffer.GetLineAt(screen_row + viewport.top_));
                 size_t l = viewport.left_;
                 size_t r = viewport.left_ + viewport.columns_ + (size_t)1;
@@ -81,7 +122,14 @@ namespace sjtu
                     AppendClearedLine(frame, "", width, true);
                     continue;
                 }
-                line = DisplayHighlight(Highlight, line.substr(l, r - l), {screen_row + viewport.top_, l}, r - l);
+                // 处理整行高亮
+                Line_Highlight_tag = "";
+                if (state.mode_ == Mode::Visual && screen_row + viewport.top_ > std::min(cursor_pos.row_, anchor_pos.row_) && screen_row + viewport.top_ < std::max(cursor_pos.row_, anchor_pos.row_))
+                    Line_Highlight_tag = "\x1b[30;47m";
+                else if (state.mode_ == Mode::Visual_Line && screen_row + viewport.top_ >= std::min(cursor_pos.row_, anchor_pos.row_) && screen_row + viewport.top_ <= std::max(cursor_pos.row_, anchor_pos.row_))
+                    Line_Highlight_tag = "\x1b[30;47m";
+                // 拼接整行高亮,处理字符高亮
+                line = DisplayHighlight(Highlight, line.substr(l, r - l), {screen_row + viewport.top_, l}, r - l, Line_Highlight_tag);
                 AppendClearedLine(frame, line, line.size() + 5, true);
             }
         }
@@ -109,16 +157,32 @@ namespace sjtu
         }
         else if (state.mode_ == Mode::Normal) // 这是未执行的指令，显示在右下角
         {
-            if(state.Recording_!="")
-                bottom=state.Recording_;
+            if (state.Recording_ != "")
+                bottom = state.Recording_;
             bottomvalue = window.GetBottomValue();
             bottomvalue += "    ";
         }
         else if (state.mode_ == Mode::Insert)
         {
             bottom = "-- INSERT --";
-            if(state.Recording_!="")
-                bottom+=" "+state.Recording_;
+            if (state.Recording_ != "")
+                bottom += " " + state.Recording_;
+        }
+        else if (state.mode_ == Mode::Visual)
+        {
+            bottom = "-- VISUAL --";
+            if (state.Recording_ != "")
+                bottom += " " + state.Recording_;
+            bottomvalue = window.GetBottomValue();
+            bottomvalue += "    ";
+        }
+        else if (state.mode_ == Mode::Visual_Line)
+        {
+            bottom = "-- VISUAL LINE --";
+            if (state.Recording_ != "")
+                bottom += " " + state.Recording_;
+            bottomvalue = window.GetBottomValue();
+            bottomvalue += "    ";
         }
         AppendClearedLine(frame, bottom, width, false);
         frame += "\x1b[0m";
@@ -137,9 +201,9 @@ namespace sjtu
         }
         else
         {
-            cursor_row = window.GetCursor().row_ - viewport.top_;
-            cursor_column = BufferColumnToRenderColumn(buffer.GetLineAt(window.GetCursor().row_), window.GetCursor().column_) - viewport.left_;
-            show_cursor_pos = std::to_string(window.GetCursor().row_ + 1) + "," + std::to_string(cursor_column + viewport.left_ + 1) + "  "; // 进行展示光标位置
+            cursor_row = cursor_pos.row_ - viewport.top_;
+            cursor_column = BufferColumnToRenderColumn(buffer.GetLineAt(cursor_pos.row_), cursor_pos.column_) - viewport.left_;
+            show_cursor_pos = std::to_string(cursor_pos.row_ + 1) + "," + std::to_string(cursor_column + viewport.left_ + 1) + "  "; // 进行展示光标位置
         }
 
         if (bottom.size() + show_cursor_pos.size() + bottomvalue.size() >= viewport.columns_)
@@ -162,14 +226,17 @@ namespace sjtu
         return frame;
     }
 
-    std::string Renderer::DisplayHighlight(std::vector<std::pair<std::string, Position>> &Highlight, std::string line, Position start_pos, size_t length) const
+    std::string Renderer::DisplayHighlight(std::vector<std::pair<std::string, Position>> &Highlight, std::string line, Position start_pos, size_t length, std::string Line_Highlight_tag = "") const
     {
+        if (Line_Highlight_tag != "")
+        {
+            return Line_Highlight_tag + line + "\x1b[0m";
+        }
         if (Highlight.empty())
         {
             return line;
         }
         std::string Return_string = "";
-        ;
         const std::string_view temporary_string = line; // 辅助的字符串
         std::vector<size_t> temporary_vector;
         temporary_vector.clear();
@@ -180,7 +247,7 @@ namespace sjtu
         }
         for (index = 0; index < Highlight.size(); index++)
         {
-            if (Highlight[index].second.row_ == start_pos.row_ && Highlight[index].second.column_ >= start_pos.column_ && Highlight[index].second.column_ < start_pos.column_ + length) // 高亮字符在显示范围内
+            if (Highlight[index].second.row_ == start_pos.row_ && Highlight[index].second.column_ >= start_pos.column_ && Highlight[index].second.column_ < start_pos.column_ + length) // 高亮字符在显示范围内,vector后面的字符会覆盖前面的
             {
                 temporary_vector[Highlight[index].second.column_ - start_pos.column_] = index + 1;
             }
@@ -192,7 +259,7 @@ namespace sjtu
                 Return_string += Highlight[temporary_vector[i] - 1].first;
             Return_string += temporary_string[index];
             index++;
-            if (temporary_vector[i] > 0 && (i + 1 >= temporary_vector.size() || temporary_vector[i + 1] == 0))
+            if (temporary_vector[i] > 0 && (i + 1 >= temporary_vector.size() || temporary_vector[i + 1] == 0)) // 下一个字符没有高亮
                 Return_string += "\x1b[0m";
         }
         index = 0;

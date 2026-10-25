@@ -30,6 +30,16 @@ namespace sjtu
         return a.row_ == b.row_ && a.column_ == b.column_;
     }
 
+    inline bool operator<=(const Position &a, const Position &b)
+    {
+        return a < b || a == b;
+    }
+
+    inline bool operator!=(const Position &a, const Position &b)
+    {
+        return a.row_ != b.row_ || a.column_ != b.column_;
+    }
+
     struct ScreenSize
     {
         // 终端的总行数和总列数,包括底部用于显示命令或提示的那一行
@@ -54,6 +64,7 @@ namespace sjtu
         Insert,
         CommandLine,
         Visual,
+        Visual_Line,
     };
 
     // Basic中支持的四个移动方向,可以由hjkl等按键生成

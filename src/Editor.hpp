@@ -62,6 +62,8 @@ namespace sjtu
         void HandleCommandLine(KeyEvent key);
         void ExecuteCommandLine();
         void LeaveCommandLine();
+        
+        void HandleVisual(KeyEvent key);
 
         bool SaveBuffer(const std::filesystem::path &path = {});
 
@@ -85,16 +87,19 @@ namespace sjtu
         std::vector<UnDo_ReDo> undo_list; // 用于撤销
         size_t undo_position_{0};         // 记录现在撤销了几次
 
-        std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符
+        std::vector<KeyEvent> Insert_Keys_;//记录所有输入的字符,用于处理count+i
 
+        //以下是寄存器内容，用于复制黏贴
         std::map<char,Register> register_;
         Register recording_register_,playing_register;//分别是q和@
         std::optional<char> recording_name,playing_name;
         size_t playing_times;
         std::optional<char> last_playing_name;
 
+        //记录修改前的光标位置
         Position last_cursor_;
 
+        //用于搜索
         std::optional<Motion> last_search_motion{};
         std::string last_search_string{""};
 
